@@ -204,13 +204,13 @@ export const PbpPane = ({ opponent, pbpText = '', onPbpTextChange }: PbpPaneProp
     let out = '#  Clock Range   Action → Result\n'
     for (const p of possessions) out += `${p.num}  ${p.start} → ${p.end}  ${p.action} → ${p.result}\n`
 
-    setPbpText(out)
+    handlePbpTextChange(out)
     alert(`✅ Processed ${possessions.length} OU defensive possessions`)
   }
 
   const handleClear = () => {
     if (confirm('Clear play-by-play text?')) {
-      setPbpText('')
+      handlePbpTextChange('')
     }
   }
 
