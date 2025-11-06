@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { HashRouter, Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import ReactClipDetail from './components/ReactClipDetail'
 import ReactClipsPanel from './components/ReactClipsPanel'
 import ReactDashboard from './components/ReactDashboard'
@@ -8,7 +9,8 @@ import type { DataMode } from './lib/data'
 import { toClipSummary, type ClipSummary } from './lib/data/transformers'
 import type { Clip } from './lib/types'
 
-type TabKey =
+// Re-defined TabKey to be more specific for routing
+export type TabKey =
   | 'tagger'
   | 'react-clips'
   | 'react-tagger-native'
@@ -22,150 +24,56 @@ type TabKey =
 interface TabConfig {
   key: TabKey
   label: string
-  hash: `#/${string}`
+  path: string // Changed from 'hash' to 'path' for react-router
   description: string
-  src?: string
   showInNav?: boolean
 }
 
-const LEGACY_TAGGER_TAB: TabConfig = {
-  key: 'tagger',
-  label: 'Clip Tagger',
-  hash: '#/tagger',
-  src: '/legacy/clip_tagger_copy.html',
-  description: 'Tag plays and manage OU defensive clips.',
-}
-
 const TABS: TabConfig[] = [
-  LEGACY_TAGGER_TAB,
-  {
-    key: 'react-clips',
-    label: 'Clips (React)',
-    hash: '#/react-clips',
-    description: 'React-native clip list powered by the data adapters.',
-  },
-  {
-    key: 'react-dashboard',
-    label: 'Dashboard (React)',
-    hash: '#/react-dashboard',
-    description: 'React-native defensive analytics dashboard.',
-  },
-  {
-    key: 'react-game',
-    label: 'Game Detail (React)',
-    hash: '#/react-game',
-    description: 'React-native per-game defensive summary.',
-    showInNav: false,
-  },
   {
     key: 'react-tagger-native',
     label: 'Clip Tagger (React)',
-    hash: '#/react-tagger-native',
+    path: '/react-tagger-native',
     description: 'Native React clip tagging interface.',
     showInNav: true,
   },
   {
-    key: 'react-detail',
-    label: 'Clip Detail (React)',
-    hash: '#/react-detail',
-    description: 'React-native clip detail viewer.',
+    key: 'react-clips',
+    label: 'Clips (React)',
+    path: '/react-clips',
+    description: 'React-native clip list powered by the data adapters.',
+    showInNav: true,
+  },
+  {
+    key: 'react-dashboard',
+    label: 'Dashboard (React)',
+    path: '/react-dashboard',
+    description: 'React-native defensive analytics dashboard.',
+    showInNav: true,
+  },
+  {
+    key: 'react-game',
+    label: 'Game Detail (React)',
+    path: '/react-game/:gameId',
+    description: 'React-native per-game defensive summary.',
     showInNav: false,
   },
   {
-    key: 'dashboard',
-    label: 'Dashboard',
-    hash: '#/dashboard',
-    src: '/legacy/clip_dashboard_refined.html',
-    description: 'Review defensive analytics, filters, and charts.',
-  },
-  {
-    key: 'detail',
-    label: 'Clip Detail',
-    hash: '#/detail',
-    src: '/legacy/clip_detail2.html',
-    description: 'Inspect individual clip metadata and notes.',
-  },
-  {
-    key: 'extractor',
-    label: 'Extractor',
-    hash: '#/extractor',
-    src: '/legacy/clip_extractor_placeholder.html',
-    description: 'Interface to the Python clip extractor service.',
+    key: 'react-detail',
+    label: 'Clip Detail (React)',
+    path: '/react-detail/:clipId',
+    description: 'React-native clip detail viewer.',
+    showInNav: false,
   },
 ]
 
 const NAV_TABS = TABS.filter((tab) => tab.showInNav !== false)
 
-type RouteState = {
-  tab: TabKey
-  clipId: string | null
-  gameId: string | null
-  hash: string
-}
-
-const DEFAULT_ROUTE: RouteState = {
-  tab: 'tagger',
-  clipId: null,
-  gameId: null,
-  hash: '#/tagger',
-}
-
-const DETAIL_PREFIX = '#/react-detail/'
-const TAGGER_PREFIX = '#/react-tagger-native/'
-const GAME_PREFIX = '#/react-game/'
-
-const parseRoute = (rawHash: string | undefined | null): RouteState => {
-  if (!rawHash || rawHash.length === 0) return DEFAULT_ROUTE
-  const hash = rawHash.trim()
-  if (!hash) return DEFAULT_ROUTE
-  const lower = hash.toLowerCase()
-
-  if (lower.startsWith(DETAIL_PREFIX)) {
-    const idEncoded = hash.slice(DETAIL_PREFIX.length)
-    const clipId = idEncoded ? decodeURIComponent(idEncoded) : null
-    return {
-      tab: 'react-detail',
-      clipId,
-      gameId: null,
-      hash: clipId ? `#/react-detail/${encodeURIComponent(clipId)}` : '#/react-detail',
-    }
-  }
-
-  if (lower.startsWith(TAGGER_PREFIX)) {
-    const idEncoded = hash.slice(TAGGER_PREFIX.length)
-    const clipId = idEncoded ? decodeURIComponent(idEncoded) : null
-    return {
-      tab: 'react-tagger-native',
-      clipId,
-      gameId: null,
-      hash: clipId ? `#/react-tagger-native/${encodeURIComponent(clipId)}` : '#/react-tagger-native',
-    }
-  }
-
-  if (lower.startsWith(GAME_PREFIX)) {
-    const idEncoded = hash.slice(GAME_PREFIX.length)
-    const gameId = idEncoded ? decodeURIComponent(idEncoded) : null
-    return {
-      tab: 'react-game',
-      clipId: null,
-      gameId,
-      hash: gameId ? `#/react-game/${encodeURIComponent(gameId)}` : '#/react-game',
-    }
-  }
-
-  if (lower === '#/react-detail') {
-    return { tab: 'react-detail', clipId: null, gameId: null, hash: '#/react-detail' }
-  }
-  if (lower === '#/react-tagger-native') {
-    return { tab: 'react-tagger-native', clipId: null, gameId: null, hash: '#/react-tagger-native' }
-  }
-
-  const matched = TABS.find((tab) => tab.hash.toLowerCase() === lower)
-  if (matched) {
-    return { tab: matched.key, clipId: null, gameId: null, hash: matched.hash }
-  }
-
-  return DEFAULT_ROUTE
+const LEGACY_IFRAME_MAP: Record<string, string> = {
+  '/tagger': '/legacy/clip_tagger_copy.html',
+  '/dashboard': '/legacy/clip_dashboard_refined.html',
+  '/detail': '/legacy/clip_detail2.html',
+  '/extractor': '/legacy/clip_extractor_placeholder.html',
 }
 
 const deriveEnvName = () => {
@@ -177,128 +85,97 @@ const deriveEnvName = () => {
   return mode ? mode.toString() : 'development'
 }
 
-function App() {
-  const [route, setRoute] = useState<RouteState>(() => parseRoute(window.location.hash))
+// A simple component to render the legacy iframes
+const IframePage = ({ src }: { src: string }) => {
+  const tab = TABS.find((t) => LEGACY_IFRAME_MAP[t.path] === src)
+  return (
+    <iframe
+      key={src}
+      title={tab?.description ?? 'Legacy Page'}
+      src={src}
+      className="absolute inset-0 h-full w-full border-0"
+      allowFullScreen
+    />
+  )
+}
+
+const Layout = () => {
+  const location = useLocation()
+  const navigate = useNavigate()
   const [dataMode, setDataMode] = useState<DataMode>('local')
   const [clipRefreshKey, setClipRefreshKey] = useState(0)
   const [selectedClipSummary, setSelectedClipSummary] = useState<ClipSummary | null>(null)
 
-  const activeTab = route.tab
-  const selectedClipId = route.clipId
-  const selectedGameId = route.gameId
-
-  const activeTabConfig = useMemo(
-    () => TABS.find((tab) => tab.key === activeTab) ?? TABS[0],
-    [activeTab],
-  )
-
   const envName = useMemo(() => deriveEnvName(), [])
 
-  useEffect(() => {
-    const handleHashChange = () => {
-      setRoute(parseRoute(window.location.hash))
-    }
+  const activeTabConfig = useMemo(() => {
+    // Find the best match for the current path
+    // This handles nested routes like /react-game/123 matching /react-game/:gameId
+    const currentPath = location.pathname
 
-    window.addEventListener('hashchange', handleHashChange)
-    return () => window.removeEventListener('hashchange', handleHashChange)
-  }, [])
+    // Try exact match first
+    const exactMatch = TABS.find((tab) => tab.path === currentPath)
+    if (exactMatch) return exactMatch
 
-  useEffect(() => {
-    if (!window.location.hash) {
-      window.location.hash = DEFAULT_ROUTE.hash
-      setRoute(DEFAULT_ROUTE)
-    }
-  }, [])
+    // For parameterized routes like /react-game/:gameId, match the base path
+    const baseMatch = TABS.find((tab) => {
+      const basePath = tab.path.split('/:')[0] // Get path before params
+      return currentPath.startsWith(basePath + '/')
+    })
+    if (baseMatch) return baseMatch
+
+    return TABS[0]
+  }, [location.pathname])
 
   useEffect(() => {
     document.title = `OU WOMEN'S BASKETBALL — ${activeTabConfig.label}`
   }, [activeTabConfig.label])
 
-  // Global video keyboard shortcuts: spacebar (play/pause), arrow keys (seek)
+  // Global video keyboard shortcuts
   useEffect(() => {
     const handleGlobalKeydown = (e: KeyboardEvent) => {
-      // Find the first video element on the page
       const video = document.querySelector('video') as HTMLVideoElement | null
       if (!video) return
-
-      // Don't intercept if user is typing in an input or textarea
       const target = e.target as HTMLElement
       if (['INPUT', 'TEXTAREA'].includes(target.tagName)) return
 
       switch (e.key) {
         case ' ':
-          // Spacebar: play/pause
           e.preventDefault()
-          if (video.paused) {
-            video.play()
-          } else {
-            video.pause()
-          }
+          if (video.paused) video.play()
+          else video.pause()
           break
         case 'ArrowRight':
-          // Right arrow: +10 seconds
           e.preventDefault()
           video.currentTime = Math.min(video.currentTime + 10, video.duration)
           break
         case 'ArrowLeft':
-          // Left arrow: -10 seconds
           e.preventDefault()
           video.currentTime = Math.max(video.currentTime - 10, 0)
           break
       }
     }
-
     document.addEventListener('keydown', handleGlobalKeydown)
     return () => document.removeEventListener('keydown', handleGlobalKeydown)
   }, [])
 
-  const handleSelect = (tabKey: TabKey) => {
-    const tab = TABS.find((item) => item.key === tabKey)
-    if (!tab) return
-    if (tab.hash === window.location.hash) return
-
-    if (tabKey === 'react-detail') {
-      if (!selectedClipId) {
-        window.location.hash = LEGACY_TAGGER_TAB.hash
-        alert('Select a clip from the legacy tagger or React list before opening the React detail view.')
-        return
-      }
-      const encoded = encodeURIComponent(selectedClipId)
-      window.location.hash = `#/react-detail/${encoded}`
-      return
-    }
-
-    if (tabKey === 'react-tagger-native' && selectedClipId) {
-      window.location.hash = `#/react-tagger-native/${encodeURIComponent(selectedClipId)}`
-      return
-    }
-
-    window.location.hash = tab.hash
-  }
-
   const handleOpenClip = (clipId: string, summary: ClipSummary) => {
     setSelectedClipSummary(summary)
-    window.location.hash = `#/react-detail/${encodeURIComponent(clipId)}`
-  }
-
-  const navigateBackToList = () => {
-    window.location.hash = '#/react-clips'
+    navigate(`/react-detail/${encodeURIComponent(clipId)}`)
   }
 
   const navigateBackToDashboard = () => {
-    window.location.hash = '#/react-dashboard'
+    navigate('/react-dashboard')
   }
 
   const navigateToGameDetail = (gameId: string) => {
-    window.location.hash = `#/react-game/${encodeURIComponent(gameId)}`
+    navigate(`/react-game/${encodeURIComponent(gameId)}`)
   }
 
   const navigateBackToClipGame = () => {
-    // If we have a clip summary with a game number, navigate to that game
     if (selectedClipSummary?.game) {
       navigateToGameDetail(selectedClipSummary.game)
     } else {
-      // Fallback to dashboard if no game info
       navigateBackToDashboard()
     }
   }
@@ -314,15 +191,16 @@ function App() {
 
   const handleSelectGame = (gameId: string) => {
     if (!gameId) return
-    window.location.hash = `#/react-game/${encodeURIComponent(gameId)}`
+    navigate(`/react-game/${encodeURIComponent(gameId)}`)
   }
 
-  const navActiveKey: TabKey =
-    activeTab === 'react-detail'
-      ? 'react-clips'
-      : activeTab === 'react-game'
-        ? 'react-dashboard'
-        : activeTab
+  const navActiveKey: TabKey | undefined = useMemo(() => {
+    const currentPath = location.pathname
+    if (currentPath.startsWith('/react-detail')) return 'react-clips'
+    if (currentPath.startsWith('/react-game')) return 'react-dashboard'
+    const tab = NAV_TABS.find((t) => t.path === currentPath)
+    return tab?.key
+  }, [location.pathname])
 
   return (
     <div className="flex min-h-screen flex-col bg-[#121212] text-white">
@@ -350,15 +228,14 @@ function App() {
                 'bg-white/10 text-white/75 hover:bg-white/20 hover:text-white'
 
               return (
-                <button
+                <Link
+                  to={tab.path}
                   key={tab.key}
-                  type="button"
                   aria-label={`Open ${tab.label}`}
-                  onClick={() => handleSelect(tab.key)}
                   className={`${baseClasses} ${isActive ? activeClasses : inactiveClasses}`}
                 >
                   {tab.label}
-                </button>
+                </Link>
               )
             })}
           </nav>
@@ -368,52 +245,18 @@ function App() {
       <main className="flex flex-1 flex-col bg-[#0a0a0a] min-h-0 overflow-hidden">
         <div className="flex flex-1 flex-col px-6 pb-0 min-h-0 overflow-hidden">
           <div className="relative flex-1 min-h-0">
-            {TABS.map((tab) => {
-              if (!tab.src) return null
-              const isActive = tab.key === activeTab
-              return (
-                <iframe
-                  key={tab.key}
-                  title={tab.description}
-                  src={tab.src}
-                  className={`absolute inset-0 h-full w-full border-0 ${isActive ? 'block' : 'hidden'}`}
-                  allowFullScreen
-                />
-              )
-            })}
-            {activeTab === 'react-clips' && (
-              <ReactClipsPanel
-                key="react-clips"
-                dataMode={dataMode}
-                onOpenClip={handleOpenClip}
-                refreshKey={clipRefreshKey}
-              />
-            )}
-            {activeTab === 'react-dashboard' && (
-              <ReactDashboard key="react-dashboard" dataMode={dataMode} onSelectGame={handleSelectGame} />
-            )}
-            {activeTab === 'react-game' && (
-              <ReactGameDetail
-                key={`react-game-${selectedGameId ?? 'none'}`}
-                dataMode={dataMode}
-                gameId={selectedGameId}
-                onBack={navigateBackToDashboard}
-                onOpenClip={(clipId, clip) => handleOpenClip(clipId, toClipSummary(clip))}
-              />
-            )}
-            {activeTab === 'react-detail' && (
-              <ReactClipDetail
-                key={`react-detail-${selectedClipId ?? 'none'}`}
-                clipId={selectedClipId}
-                dataMode={dataMode}
-                onBack={navigateBackToClipGame}
-                onClipUpdated={handleClipUpdated}
-                summary={selectedClipSummary ?? undefined}
-              />
-            )}
-            {activeTab === 'react-tagger-native' && (
-              <ReactTaggerNative key="react-tagger-native" />
-            )}
+            <Outlet
+              context={{
+                dataMode,
+                clipRefreshKey,
+                selectedClipSummary,
+                handleOpenClip,
+                navigateBackToDashboard,
+                navigateBackToClipGame,
+                handleClipUpdated,
+                handleSelectGame,
+              }}
+            />
           </div>
         </div>
       </main>
@@ -457,6 +300,82 @@ function App() {
         </div>
       </footer>
     </div>
+  )
+}
+
+// Wrapper components that use hooks properly
+type OutletContextType = {
+  dataMode: DataMode
+  clipRefreshKey: number
+  selectedClipSummary: ClipSummary | null
+  handleOpenClip: (clipId: string, summary: ClipSummary) => void
+  navigateBackToDashboard: () => void
+  navigateBackToClipGame: () => void
+  handleClipUpdated: (clip: Clip) => void
+  handleSelectGame: (gameId: string) => void
+}
+
+const ReactClipsPanelWrapper = () => {
+  const context = useOutletContext<OutletContextType>()
+  return (
+    <ReactClipsPanel
+      dataMode={context.dataMode}
+      onOpenClip={context.handleOpenClip}
+      refreshKey={context.clipRefreshKey}
+    />
+  )
+}
+
+const ReactDashboardWrapper = () => {
+  const context = useOutletContext<OutletContextType>()
+  return <ReactDashboard dataMode={context.dataMode} onSelectGame={context.handleSelectGame} />
+}
+
+const ReactGameDetailWrapper = () => {
+  const context = useOutletContext<OutletContextType>()
+  const { gameId } = useParams<{ gameId: string }>()
+  return (
+    <ReactGameDetail
+      dataMode={context.dataMode}
+      gameId={gameId}
+      onBack={context.navigateBackToDashboard}
+      onOpenClip={(clipId, clip) => context.handleOpenClip(clipId, toClipSummary(clip))}
+    />
+  )
+}
+
+const ReactClipDetailWrapper = () => {
+  const context = useOutletContext<OutletContextType>()
+  return (
+    <ReactClipDetail
+      dataMode={context.dataMode}
+      onBack={context.navigateBackToClipGame}
+      onClipUpdated={context.handleClipUpdated}
+      summary={context.selectedClipSummary ?? undefined}
+    />
+  )
+}
+
+function App() {
+  return (
+    <HashRouter>
+      <Routes>
+        <Route path="/" element={<Layout />}>
+          {/* Redirect root to the default page */}
+          <Route index element={<Navigate to="/react-tagger-native" replace />} />
+
+          {/* React Pages */}
+          <Route path="/react-clips" element={<ReactClipsPanelWrapper />} />
+          <Route path="/react-dashboard" element={<ReactDashboardWrapper />} />
+          <Route path="/react-game/:gameId" element={<ReactGameDetailWrapper />} />
+          <Route path="/react-detail/:clipId" element={<ReactClipDetailWrapper />} />
+          <Route path="/react-tagger-native" element={<ReactTaggerNative />} />
+
+          {/* Fallback for any other route */}
+          <Route path="*" element={<Navigate to="/react-tagger-native" replace />} />
+        </Route>
+      </Routes>
+    </HashRouter>
   )
 }
 

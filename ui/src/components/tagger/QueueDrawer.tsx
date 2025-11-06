@@ -53,14 +53,14 @@ export const QueueDrawer = ({
       {/* Drawer Tab */}
       <button
         onClick={onToggle}
-        className="fixed bottom-0 left-1/2 z-40 -translate-x-1/2 transform cursor-pointer rounded-t-[10px] border border-b-0 border-[#2a2a2a] bg-[#181818] px-[0.8rem] py-[0.35rem] text-[0.8rem] text-[#f0eee8] shadow-[0_-2px_10px_rgba(0,0,0,0.35)]"
+        className="fixed bottom-0 left-1/2 z-50 -translate-x-1/2 transform cursor-pointer rounded-t-[10px] border border-b-0 border-[#2a2a2a] bg-[#181818] px-[0.8rem] py-[0.35rem] text-[0.8rem] text-[#f0eee8] shadow-[0_-2px_10px_rgba(0,0,0,0.35)]"
       >
         Clips ({clips.length}) ▴
       </button>
 
       {/* Drawer */}
       <section
-        className={`fixed bottom-0 left-0 right-0 z-45 border-t border-[#2a2a2a] bg-[#121212] shadow-[0_-8px_24px_rgba(0,0,0,0.45)] transition-transform duration-[220ms] ${
+        className={`fixed bottom-0 left-0 right-0 z-50 border-t border-[#2a2a2a] bg-[#121212] shadow-[0_-8px_24px_rgba(0,0,0,0.45)] transition-transform duration-[220ms] ${
           isOpen ? 'translate-y-0' : 'translate-y-[calc(100%-36px)]'
         } ${!isOpen ? 'hidden' : 'block'}`}
       >

@@ -6,7 +6,7 @@ import { aggregateGames, formatPercent, summarizeStops } from './dashboardUtils'
 import type { LocationTag } from '../lib/data/transformers'
 import './ReactDashboard.css'
 
-type ViewMode = 'grid' | 'table'
+type ViewMode = 'grid' | 'table' | 'shotchart'
 type LocationFilter = 'all' | 'home' | 'away' | 'neutral'
 type FilterKey =
   | 'situation'
@@ -692,6 +692,13 @@ const ReactDashboard = ({ dataMode, onSelectGame }: ReactDashboardProps) => {
             >
               Table
             </button>
+            <button
+              type="button"
+              className={`radio-btn ${viewMode === 'shotchart' ? 'active' : ''}`}
+              onClick={() => setViewMode('shotchart')}
+            >
+              Shot Chart
+            </button>
           </div>
         </div>
 
@@ -746,6 +753,121 @@ const ReactDashboard = ({ dataMode, onSelectGame }: ReactDashboardProps) => {
         <div className="dashboard-loading">Loading games…</div>
       ) : filteredGames.length === 0 ? (
         <div className="dashboard-empty">No games match the current filters.</div>
+      ) : viewMode === 'shotchart' ? (
+        <section className="shot-chart-view">
+          <div className="shot-chart-container">
+            <img
+              src="/shot-chart.png"
+              alt="Basketball Court"
+              className="shot-chart-court"
+            />
+            <svg className="shot-chart-overlay" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+              {filteredClips
+                .filter((clip) => clip.shotX != null && clip.shotY != null)
+                .map((clip, index) => {
+                  const cx = Math.max(0, Math.min(100, clip.shotX ?? 0))
+                  const cy = Math.max(0, Math.min(100, clip.shotY ?? 0))
+                  const playerDesignation = (clip.playerDesignation || '').toLowerCase()
+                  const shotResult = (clip.shotResult || '').toLowerCase()
+
+                  const playerColor =
+                    playerDesignation === 'primary'
+                      ? '#3b82f6'
+                      : playerDesignation === 'shooter'
+                        ? '#22c55e'
+                        : playerDesignation === 'role'
+                          ? '#1f2937'
+                          : '#6b7280'
+
+                  const resultColor =
+                    shotResult === 'make'
+                      ? '#22c55e'
+                      : shotResult === 'miss'
+                        ? '#ef4444'
+                        : '#6b7280'
+
+                  return (
+                    <g
+                      key={`shot-${clip.id}-${index}`}
+                      className="shot-marker-group"
+                      onClick={() => {
+                        if (clip.gameId) {
+                          onSelectGame?.(clip.gameId)
+                        }
+                      }}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <title>
+                        {clip.opponent || 'Unknown'} • Q{clip.quarter || '?'} • {clip.playName || 'No play'} • {clip.shotContest || 'No contest'}{clip.breakdown ? ' • BREAKDOWN' : ' • No breakdown'}
+                      </title>
+                      {/* White outline */}
+                      <circle cx={cx} cy={cy} r="1.2" fill="white" />
+                      {/* Left half - Player Designation */}
+                      <path
+                        d={`M ${cx},${cy - 1} A 1,1 0 0,1 ${cx},${cy + 1} Z`}
+                        fill={playerColor}
+                      />
+                      {/* Right half - Shot Result */}
+                      <path
+                        d={`M ${cx},${cy - 1} A 1,1 0 0,0 ${cx},${cy + 1} Z`}
+                        fill={resultColor}
+                      />
+                    </g>
+                  )
+                })}
+            </svg>
+          </div>
+          <div className="shot-chart-legend">
+            <div className="legend-section">
+              <h4>Player Designation (Left Half)</h4>
+              <div className="legend-items">
+                <span className="legend-item">
+                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ flexShrink: 0 }}>
+                    <path d="M 8,1 A 7,7 0 0,0 8,15 L 8,1 Z" fill="#3b82f6" stroke="white" strokeWidth="1.5" />
+                  </svg>
+                  Primary
+                </span>
+                <span className="legend-item">
+                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ flexShrink: 0 }}>
+                    <path d="M 8,1 A 7,7 0 0,0 8,15 L 8,1 Z" fill="#22c55e" stroke="white" strokeWidth="1.5" />
+                  </svg>
+                  Shooter
+                </span>
+                <span className="legend-item">
+                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ flexShrink: 0 }}>
+                    <path d="M 8,1 A 7,7 0 0,0 8,15 L 8,1 Z" fill="#1f2937" stroke="white" strokeWidth="1.5" />
+                  </svg>
+                  Role
+                </span>
+              </div>
+            </div>
+            <div className="legend-section">
+              <h4>Shot Result (Right Half)</h4>
+              <div className="legend-items">
+                <span className="legend-item">
+                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ flexShrink: 0 }}>
+                    <path d="M 8,1 A 7,7 0 0,1 8,15 L 8,1 Z" fill="#22c55e" stroke="white" strokeWidth="1.5" />
+                  </svg>
+                  Make
+                </span>
+                <span className="legend-item">
+                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ flexShrink: 0 }}>
+                    <path d="M 8,1 A 7,7 0 0,1 8,15 L 8,1 Z" fill="#ef4444" stroke="white" strokeWidth="1.5" />
+                  </svg>
+                  Miss
+                </span>
+              </div>
+            </div>
+            <div className="legend-section">
+              <h4>Total Shots</h4>
+              <div className="legend-items">
+                <span className="legend-item" style={{ fontSize: '1.2rem', fontWeight: 600 }}>
+                  {filteredClips.filter((clip) => clip.shotX != null && clip.shotY != null).length}
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
       ) : viewMode === 'grid' ? (
         <div className="games-grid">
           {filteredGames.map((game) => {

@@ -37,6 +37,7 @@ export type Clip = {
   shotX?: number
   shotY?: number
   shotResult?: string
+  playerDesignation?: string
   shotLocation?: string
   shotContest?: string
   shotQuality?: string
@@ -103,6 +104,11 @@ export type TagFields = {
   reboundOutcome: string
   points: string
   notes: string
+  hasShot: string
+  shotX: string
+  shotY: string
+  shotResult: string
+  playerDesignation: string
 }
 
 export type QueueEntry = {

@@ -20,5 +20,9 @@ ui/pnpm-debug.log*
 # Clips cache
 ui/public/legacy/Clips/
 
+# Database backups (keep main DB, ignore backup copies)
+data/backups/
+*.backup.*.sqlite
+
 # Misc
 Thumbs.db

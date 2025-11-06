@@ -1,12 +1,32 @@
 import { useState } from 'react'
+import { ShotChart } from './ShotChart'
 
 type PbpPaneProps = {
   opponent: string
   pbpText?: string
   onPbpTextChange?: (text: string) => void
+  shotX?: string
+  shotY?: string
+  shotResult?: string
+  playerDesignation?: string
+  onShotDataChange?: (data: {
+    shotX: string
+    shotY: string
+    shotResult: string
+    playerDesignation: string
+  }) => void
 }
 
-export const PbpPane = ({ opponent, pbpText = '', onPbpTextChange }: PbpPaneProps) => {
+export const PbpPane = ({
+  opponent,
+  pbpText = '',
+  onPbpTextChange,
+  shotX = '',
+  shotY = '',
+  shotResult = '',
+  playerDesignation = '',
+  onShotDataChange,
+}: PbpPaneProps) => {
   const [activeTab, setActiveTab] = useState<'filter' | 'shot'>('filter')
 
   const handlePbpTextChange = (text: string) => {
@@ -204,13 +224,13 @@ export const PbpPane = ({ opponent, pbpText = '', onPbpTextChange }: PbpPaneProp
     let out = '#  Clock Range   Action → Result\n'
     for (const p of possessions) out += `${p.num}  ${p.start} → ${p.end}  ${p.action} → ${p.result}\n`
 
-    setPbpText(out)
+    handlePbpTextChange(out)
     alert(`✅ Processed ${possessions.length} OU defensive possessions`)
   }
 
   const handleClear = () => {
     if (confirm('Clear play-by-play text?')) {
-      setPbpText('')
+      handlePbpTextChange('')
     }
   }
 
@@ -263,15 +283,58 @@ export const PbpPane = ({ opponent, pbpText = '', onPbpTextChange }: PbpPaneProp
               value={pbpText}
               onChange={(e) => handlePbpTextChange(e.target.value)}
               placeholder="Paste ESPN Play-by-Play here..."
-              className="min-h-0 flex-1 resize-none rounded-[10px] border border-[#841617] bg-black p-3 font-mono text-[11px] leading-[1.35] text-white"
+              className="min-h-0 flex-1 resize-none rounded-[10px] border border-[#841617] bg-black p-3 font-mono text-[11px] leading-[1.35] text-white focus:outline-none focus:ring-0"
             />
           </div>
         )}
         {activeTab === 'shot' && (
           <div className="flex min-h-0 flex-1 flex-col">
-            <div className="flex-1 text-sm text-gray-400">
-              Shot Chart Picker coming soon...
-            </div>
+            <ShotChart
+              shotX={shotX}
+              shotY={shotY}
+              shotResult={shotResult}
+              playerDesignation={playerDesignation}
+              onShotClick={(x, y) => {
+                if (onShotDataChange) {
+                  onShotDataChange({
+                    shotX: x.toFixed(2),
+                    shotY: y.toFixed(2),
+                    shotResult: shotResult || 'miss',
+                    playerDesignation: playerDesignation || 'role',
+                  })
+                }
+              }}
+              onShotResultChange={(result) => {
+                if (onShotDataChange) {
+                  onShotDataChange({
+                    shotX,
+                    shotY,
+                    shotResult: result,
+                    playerDesignation,
+                  })
+                }
+              }}
+              onPlayerDesignationChange={(designation) => {
+                if (onShotDataChange) {
+                  onShotDataChange({
+                    shotX,
+                    shotY,
+                    shotResult,
+                    playerDesignation: designation,
+                  })
+                }
+              }}
+              onClear={() => {
+                if (onShotDataChange) {
+                  onShotDataChange({
+                    shotX: '',
+                    shotY: '',
+                    shotResult: '',
+                    playerDesignation: '',
+                  })
+                }
+              }}
+            />
           </div>
         )}
       </div>

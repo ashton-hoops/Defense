@@ -48,7 +48,7 @@ export const ControlsBar = ({
   }
 
   return (
-    <div className="flex flex-shrink-0 flex-nowrap items-center justify-center gap-[0.25rem] rounded-[10px] border border-[#1c242d] bg-[#191919] px-[0.3rem] py-[0.22rem]">
+    <div className="flex flex-shrink-0 flex-nowrap items-center justify-center gap-[0.25rem] rounded-[10px] border border-[#2a2a2a] bg-[#191919] px-[0.3rem] py-[0.22rem]">
       {/* Load Video */}
       <button
         onClick={onLoadVideo}

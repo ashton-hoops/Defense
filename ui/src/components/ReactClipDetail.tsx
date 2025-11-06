@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useParams } from 'react-router-dom'
 import { createCloudAdapter, createLocalAdapter } from '../lib/data'
 import type { DataMode } from '../lib/data'
 import type { Clip } from '../lib/types'
@@ -6,7 +7,6 @@ import { findCachedClip, normalizeClip, resolveLocationLabel, type ClipSummary }
 import './ReactClipDetail.css'
 
 type ReactClipDetailProps = {
-  clipId: string | null
   dataMode: DataMode
   onBack?: () => void
   onClipUpdated?: (clip: Clip) => void
@@ -19,7 +19,8 @@ const connectionLabel = {
   offline: 'Offline',
 } as const
 
-const ReactClipDetail = ({ clipId, dataMode, onBack, summary }: ReactClipDetailProps) => {
+const ReactClipDetail = ({ dataMode, onBack, summary }: ReactClipDetailProps) => {
+  const { clipId } = useParams<{ clipId: string }>()
   const [status, setStatus] = useState<'checking' | 'online' | 'offline'>('checking')
   const [clip, setClip] = useState<Clip | null>(null)
   const [loading, setLoading] = useState(false)

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useParams } from 'react-router-dom'
 import type { DataMode } from '../lib/data'
 import { createCloudAdapter, createLocalAdapter } from '../lib/data'
 import type { Clip } from '../lib/types'
@@ -6,7 +7,7 @@ import { resolveLocationLabel } from '../lib/data/transformers'
 import { computeGameStats, detectBreakdown, detectStop, formatPercent } from './dashboardUtils'
 import './ReactGameDetail.css'
 
-type ViewMode = 'grid' | 'table'
+type ViewMode = 'grid' | 'table' | 'shotchart'
 type FilterKey =
   | 'situation'
   | 'scout'
@@ -256,7 +257,6 @@ const createEmptyFilterState = (): FilterState =>
   }, {} as FilterState)
 
 type ReactGameDetailProps = {
-  gameId: string | null
   dataMode: DataMode
   onBack?: () => void
   onOpenClip?: (clipId: string, clip: Clip) => void
@@ -271,7 +271,8 @@ const hasShotCoordinates = (clip: Clip): clip is Clip & { shotX: number; shotY: 
       Number.isFinite(clip.shotY),
   )
 
-const ReactGameDetail = ({ gameId, dataMode, onBack, onOpenClip }: ReactGameDetailProps) => {
+const ReactGameDetail = ({ dataMode, onBack, onOpenClip }: ReactGameDetailProps) => {
+  const { gameId } = useParams<{ gameId: string }>()
   const [clips, setClips] = useState<Clip[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -579,6 +580,13 @@ const ReactGameDetail = ({ gameId, dataMode, onBack, onOpenClip }: ReactGameDeta
           >
             Spreadsheet
           </button>
+          <button
+            type="button"
+            className={`view-btn ${viewMode === 'shotchart' ? 'active' : ''}`}
+            onClick={() => setViewMode('shotchart')}
+          >
+            Shot Chart
+          </button>
         </div>
         <div className="toolbar-actions">
           <button type="button" className="filter-btn" onClick={handleExport}>
@@ -590,45 +598,113 @@ const ReactGameDetail = ({ gameId, dataMode, onBack, onOpenClip }: ReactGameDeta
         </div>
       </section>
 
-      {shots.length > 0 && (
-        <section className={`shot-chart-panel ${shotCollapsed ? 'collapsed' : ''}`}>
-          <header onClick={() => setShotCollapsed((value) => !value)}>
-            <div>
-              <h3>Shot Chart — {opponent}</h3>
-              <p>{shots.length} shots logged</p>
-            </div>
-          </header>
-          {!shotCollapsed && (
-            <div className="shot-chart">
-              <svg viewBox="0 0 100 94" role="img" aria-label="half court shot chart">
-                <rect x="0" y="0" width="100" height="94" fill="#111111" />
-                <circle cx="50" cy="47" r="18" stroke="#2a2a2a" fill="none" strokeWidth="1" />
-                <rect x="19" y="20" width="62" height="50" stroke="#2a2a2a" fill="none" strokeWidth="1" />
-                {shots.map((shot) => {
-                  const cx = Math.max(0, Math.min(100, shot.shotX ?? 0))
-                  const cy = Math.max(0, Math.min(94, 94 - (shot.shotY ?? 0)))
-                  const made = (shot.shotResult ?? '').toLowerCase().includes('made')
-                  return (
-                    <circle
-                      key={`${shot.id}-${shot.shotX}-${shot.shotY}`}
-                      cx={cx}
-                      cy={cy}
-                      r={2.2}
-                      fill={made ? '#22c55e' : '#ef4444'}
-                      opacity={0.85}
-                    />
-                  )
-                })}
-              </svg>
-            </div>
-          )}
-        </section>
-      )}
 
       {loading ? (
         <div className="game-detail__loading">Loading clips…</div>
       ) : filteredClips.length === 0 ? (
         <div className="game-detail__empty">No clips captured for this game.</div>
+      ) : viewMode === 'shotchart' ? (
+        <section className="shot-chart-view">
+          <div className="shot-chart-container">
+            <img
+              src="/shot-chart.png"
+              alt="Basketball Court"
+              className="shot-chart-court"
+            />
+            <svg className="shot-chart-overlay" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+              {shots.map((shot, index) => {
+                const cx = Math.max(0, Math.min(100, shot.shotX ?? 0))
+                const cy = Math.max(0, Math.min(100, shot.shotY ?? 0))
+                const playerDesignation = shot.playerDesignation || ''
+                const shotResult = shot.shotResult || ''
+
+                const playerColor =
+                  playerDesignation === 'primary'
+                    ? '#3b82f6'
+                    : playerDesignation === 'shooter'
+                      ? '#22c55e'
+                      : playerDesignation === 'role'
+                        ? '#1f2937'
+                        : '#6b7280'
+
+                const resultColor =
+                  shotResult === 'make'
+                    ? '#22c55e'
+                    : shotResult === 'miss'
+                      ? '#ef4444'
+                      : '#6b7280'
+
+                return (
+                  <g
+                    key={`shot-${index}`}
+                    className="shot-marker-group"
+                    onClick={() => handleClipClick(shot)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <title>
+                      Q{shot.quarter} P{shot.possession} • {shot.playName || 'No play'} • {shot.coverage || 'No coverage'}
+{shot.shotContest ? ` • ${shot.shotContest}` : ''} • {shotResult === 'make' ? 'MAKE' : 'MISS'} • {shot.points || 0} pts
+                    </title>
+                    {/* White outline */}
+                    <circle cx={cx} cy={cy} r="1.2" fill="white" />
+                    {/* Left half - Player Designation */}
+                    <path
+                      d={`M ${cx},${cy - 1} A 1,1 0 0,1 ${cx},${cy + 1} Z`}
+                      fill={playerColor}
+                    />
+                    {/* Right half - Shot Result */}
+                    <path
+                      d={`M ${cx},${cy - 1} A 1,1 0 0,0 ${cx},${cy + 1} Z`}
+                      fill={resultColor}
+                    />
+                  </g>
+                )
+              })}
+            </svg>
+          </div>
+          <div className="shot-chart-legend">
+            <div className="legend-section">
+              <h4>Player Designation (Left Half)</h4>
+              <div className="legend-items">
+                <span className="legend-item">
+                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ flexShrink: 0 }}>
+                    <path d="M 8,1 A 7,7 0 0,0 8,15 L 8,1 Z" fill="#3b82f6" stroke="white" strokeWidth="1.5" />
+                  </svg>
+                  Primary
+                </span>
+                <span className="legend-item">
+                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ flexShrink: 0 }}>
+                    <path d="M 8,1 A 7,7 0 0,0 8,15 L 8,1 Z" fill="#22c55e" stroke="white" strokeWidth="1.5" />
+                  </svg>
+                  Shooter
+                </span>
+                <span className="legend-item">
+                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ flexShrink: 0 }}>
+                    <path d="M 8,1 A 7,7 0 0,0 8,15 L 8,1 Z" fill="#1f2937" stroke="white" strokeWidth="1.5" />
+                  </svg>
+                  Role
+                </span>
+              </div>
+            </div>
+            <div className="legend-section">
+              <h4>Shot Result (Right Half)</h4>
+              <div className="legend-items">
+                <span className="legend-item">
+                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ flexShrink: 0 }}>
+                    <path d="M 8,1 A 7,7 0 0,1 8,15 L 8,1 Z" fill="#22c55e" stroke="white" strokeWidth="1.5" />
+                  </svg>
+                  Make
+                </span>
+                <span className="legend-item">
+                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ flexShrink: 0 }}>
+                    <path d="M 8,1 A 7,7 0 0,1 8,15 L 8,1 Z" fill="#ef4444" stroke="white" strokeWidth="1.5" />
+                  </svg>
+                  Miss
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
       ) : viewMode === 'grid' ? (
         <section className="clips-grid">
           {filteredClips.map((clip) => (

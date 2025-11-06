@@ -350,10 +350,10 @@ const ReactTaggerNative = () => {
         'Shot Location': fields.shotLocation,
         'Shot Contest': fields.shotContest,
         'Rebound Outcome': fields.reboundOutcome,
-        'Has Shot': 'No',
-        'Shot X': '',
-        'Shot Y': '',
-        'Shot Result': '',
+        'Has Shot': fields.hasShot || 'No',
+        'Shot X': fields.shotX || '',
+        'Shot Y': fields.shotY || '',
+        'Shot Result': fields.shotResult || '',
         Points: fields.points,
         Notes: fields.notes,
         'Start Time': inTime,
@@ -410,10 +410,11 @@ const ReactTaggerNative = () => {
         contest: fields.shotContest || '',
         rebound: fields.reboundOutcome || '',
         points: parseInt(fields.points, 10) || 0,
-        has_shot: 'No',
-        shot_x: '',
-        shot_y: '',
-        shot_result: '',
+        has_shot: fields.hasShot || 'No',
+        shot_x: fields.shotX || '',
+        shot_y: fields.shotY || '',
+        shot_result: fields.shotResult || '',
+        player_designation: fields.playerDesignation || '',
         notes: fields.notes || '',
         start_time: inTime,
         end_time: outTime,
@@ -464,6 +465,11 @@ const ReactTaggerNative = () => {
         reboundOutcome: '',
         points: '0',
         notes: '',
+        hasShot: 'No',
+        shotX: '',
+        shotY: '',
+        shotResult: '',
+        playerDesignation: '',
       }))
 
       // Clear IN/OUT
@@ -651,11 +657,29 @@ const ReactTaggerNative = () => {
             className="panel relative flex flex-col overflow-hidden rounded-xl border border-[#2a2a2a] bg-[#1a1a1a] p-3 shadow-[0_8px_24px_rgba(0,0,0,0.35)]"
             style={{
               gridArea: 'pbp',
-              height: 'calc(clamp(300px, calc(100vh - 240px), 560px) + 56px)',
-              maxHeight: 'calc(clamp(300px, calc(100vh - 240px), 560px) + 56px)',
+              height: 'calc(clamp(300px, calc(100vh - 240px), 560px) + 101px)',
+              maxHeight: 'calc(clamp(300px, calc(100vh - 240px), 560px) + 101px)',
             }}
           >
-            <PbpPane opponent={fields.opponent} pbpText={pbpText} onPbpTextChange={setPbpText} />
+            <PbpPane
+              opponent={fields.opponent}
+              pbpText={pbpText}
+              onPbpTextChange={setPbpText}
+              shotX={fields.shotX || ''}
+              shotY={fields.shotY || ''}
+              shotResult={fields.shotResult || ''}
+              playerDesignation={fields.playerDesignation || ''}
+              onShotDataChange={(data) => {
+                setFields((prev) => ({
+                  ...prev,
+                  shotX: data.shotX,
+                  shotY: data.shotY,
+                  shotResult: data.shotResult,
+                  playerDesignation: data.playerDesignation,
+                  hasShot: data.shotX && data.shotY ? 'Yes' : 'No',
+                }))
+              }}
+            />
           </aside>
 
           {/* Game Info Bar */}
