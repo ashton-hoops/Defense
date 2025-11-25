@@ -14,6 +14,17 @@ except ImportError:
     def is_cloud(): return False
     def is_local(): return True
 
+# Import authentication decorators
+try:
+    from auth import require_auth, require_write, require_admin
+    AUTH_AVAILABLE = True
+except ImportError:
+    AUTH_AVAILABLE = False
+    # No-op decorators for local development without auth
+    def require_auth(f): return f
+    def require_write(f): return f
+    def require_admin(f): return f
+
 # Use cloud_db in cloud, analytics_db locally
 if CLOUD_AVAILABLE and is_cloud():
     print("🌩️  Running in CLOUD mode - using PostgreSQL")
@@ -93,6 +104,7 @@ def clip_detail():
 
 @app.route('/clips/<path:filename>')
 @app.route('/legacy/Clips/<path:filename>')
+@require_auth
 def serve_clip(filename):
     """Serve video clip files with proper headers for streaming"""
     full_path = CLIPS_DIR / filename
@@ -105,11 +117,16 @@ def serve_clip(filename):
     return response
 
 @app.route('/api/clips', methods=['GET', 'POST'])
+@require_auth
 def api_clips():
     """Get all clips or add a new clip"""
     try:
         # ---- POST: Add a new clip ----
         if request.method == 'POST':
+            # Check write access for guest users
+            user = getattr(request, 'user', None)
+            if user and user.get('role') == 'guest':
+                return jsonify({'error': 'Write access not allowed for guest users'}), 403
             new_clip = request.get_json()
             actions_payload = new_clip.get('actions')
             if actions_payload is not None and not isinstance(actions_payload, str):
@@ -288,6 +305,7 @@ def remove_game_from_metadata(game_identifier, canonical_game_id=None):
 
 
 @app.route('/api/clip/<clip_id>', methods=['GET', 'PUT', 'DELETE'])
+@require_auth
 def api_clip_detail(clip_id):
     """Get, update, or delete single clip metadata"""
     if request.method == 'GET':
@@ -310,6 +328,10 @@ def api_clip_detail(clip_id):
 
     # DELETE clip
     if request.method == 'DELETE':
+        # Only admin can delete - coaches must use delete requests
+        user = getattr(request, 'user', None)
+        if user and user.get('role') != 'admin':
+            return jsonify({'error': 'Only admin can delete clips. Coaches should use delete requests.'}), 403
         try:
             print(f"[DEBUG] Attempting to delete clip: {clip_id}")
             # Delete from database if exists
@@ -346,6 +368,10 @@ def api_clip_detail(clip_id):
 
     # PUT update
     if request.method == 'PUT':
+        # Check write access for guest users
+        user = getattr(request, 'user', None)
+        if user and user.get('role') == 'guest':
+            return jsonify({'error': 'Write access not allowed for guest users'}), 403
         try:
             payload = request.get_json(force=True) or {}
             print(f"[DEBUG] Received PUT payload for clip {clip_id}: {payload}")
@@ -526,10 +552,16 @@ def transform_db_clip(clip):
     }
 
 @app.route('/api/clip/<clip_id>/shot', methods=['PUT', 'DELETE', 'OPTIONS'])
+@require_auth
 def update_clip_shot(clip_id):
     """Update or delete shot data for a clip"""
     if request.method == 'OPTIONS':
         return jsonify({"ok": True})
+
+    # Check write access for guest users
+    user = getattr(request, 'user', None)
+    if user and user.get('role') == 'guest':
+        return jsonify({'error': 'Write access not allowed for guest users'}), 403
 
     try:
         from analytics_db import get_connection
@@ -614,8 +646,9 @@ def update_clip_shot(clip_id):
 
 
 @app.route('/api/games/<game_id>', methods=['DELETE'])
+@require_admin
 def api_delete_game(game_id: str):
-    """Delete all clips associated with a specific game."""
+    """Delete all clips associated with a specific game. Admin only."""
     canonical_id = request.args.get('canonical_id')
     normalized_game_id = (game_id or '').strip()
     if not normalized_game_id and not canonical_id:
@@ -660,6 +693,7 @@ def bridge_excel_request(method: str, endpoint: str, **kwargs):
 
 
 @app.route('/excel/status')
+@require_auth
 def excel_status():
     controller = None
     workbook = None
@@ -677,6 +711,7 @@ def excel_status():
 
 
 @app.route('/excel/start', methods=['POST'])
+@require_write
 def excel_start():
     try:
         data = bridge_ctrl_request('POST', '/start')
@@ -686,6 +721,7 @@ def excel_start():
 
 
 @app.route('/excel/stop', methods=['POST'])
+@require_write
 def excel_stop():
     try:
         data = bridge_ctrl_request('POST', '/stop')
@@ -695,6 +731,7 @@ def excel_stop():
 
 
 @app.route('/excel/check-row')
+@require_auth
 def excel_check_row():
     try:
         row = request.args.get('row', type=int) or 2
@@ -705,6 +742,7 @@ def excel_check_row():
 
 
 @app.route('/excel/append', methods=['POST'])
+@require_write
 def excel_append():
     try:
         payload = request.get_json(force=True) or {}
@@ -715,6 +753,7 @@ def excel_append():
 
 
 @app.route('/api/search/semantic', methods=['POST'])
+@require_auth
 def api_semantic_search():
     """
     AI-powered semantic search endpoint.
@@ -762,6 +801,7 @@ def api_semantic_search():
 
 
 @app.route('/api/search/rebuild-embeddings', methods=['POST'])
+@require_write
 def api_rebuild_embeddings():
     """
     Rebuild all clip embeddings. Call this when clips are added/updated.
