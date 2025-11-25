@@ -856,10 +856,14 @@ def api_login():
             return jsonify({'error': 'Username and password required'}), 400
 
         # Authenticate user
+        print(f"🔍 Attempting login for username: '{username}'")
         user = authenticate_user(username, password)
 
         if not user:
+            print(f"❌ Authentication failed for username: '{username}'")
             return jsonify({'error': 'Invalid credentials'}), 401
+
+        print(f"✅ Authentication successful for: '{username}' (role: {user.get('role')})")
 
         # Create JWT token
         token = create_jwt_token(user['username'], user['role'])

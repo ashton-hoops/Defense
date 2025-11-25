@@ -163,9 +163,13 @@ def authenticate_user(username: str, password: str) -> dict:
     user = USER_DB.get(username)
 
     if not user:
+        if is_cloud():
+            print(f"🔍 User '{username}' not found in database. Available users: {list(USER_DB.keys())}")
         return None
 
     if not verify_password(password, user['password_hash']):
+        if is_cloud():
+            print(f"🔍 Password verification failed for user '{username}'")
         return None
 
     return {
