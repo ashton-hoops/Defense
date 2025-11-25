@@ -343,15 +343,17 @@ const Layout = () => {
             </nav>
 
             <div className="flex items-center gap-3">
-              {/* Database Mode Toggle */}
-              <button
-                onClick={toggleDataMode}
-                className="rounded-full bg-white/10 px-3 py-1.5 text-[0.75rem] font-medium transition hover:bg-white/20 flex items-center gap-2"
-                title={`Switch to ${dataMode === 'local' ? 'cloud' : 'local'} mode`}
-              >
-                <span className={`w-2 h-2 rounded-full ${dataMode === 'cloud' ? 'bg-green-400' : 'bg-gray-400'}`} />
-                {dataMode === 'local' ? '💻 Local' : '☁️ Cloud'}
-              </button>
+              {/* Database Mode Toggle - Only show in dev mode */}
+              {import.meta.env.DEV && (
+                <button
+                  onClick={toggleDataMode}
+                  className="rounded-full bg-white/10 px-3 py-1.5 text-[0.75rem] font-medium transition hover:bg-white/20 flex items-center gap-2"
+                  title={`Switch to ${dataMode === 'local' ? 'cloud' : 'local'} mode`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${dataMode === 'cloud' ? 'bg-green-400' : 'bg-gray-400'}`} />
+                  {dataMode === 'local' ? '💻 Local' : '☁️ Cloud'}
+                </button>
+              )}
 
               {/* User Info / Logout */}
               {dataMode === 'cloud' && isAuthenticated && (
