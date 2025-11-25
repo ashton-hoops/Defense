@@ -1,7 +1,8 @@
 import type { Clip, Game, ExtractionJob, PaginatedResponse } from '../types'
 import type { ClipListParams, DataAdapter } from './index'
 
-const API_BASE = 'https://ou-basketball-defense.onrender.com'
+// Use relative URLs when in production (same domain), absolute in dev
+const API_BASE = import.meta.env.DEV ? 'https://ou-basketball-defense.onrender.com' : ''
 
 export class CloudAdapter implements DataAdapter {
   readonly mode = 'cloud' as const

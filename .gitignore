@@ -8,7 +8,7 @@ Clips/
 
 # Node / Vite
 ui/node_modules/
-ui/dist/
+# ui/dist/ - Keep dist for Render deployment
 
 # Python
 __pycache__/

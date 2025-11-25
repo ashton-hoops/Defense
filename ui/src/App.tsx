@@ -6,6 +6,7 @@ import ReactDashboard from './components/ReactDashboard'
 import ReactGameDetail from './components/ReactGameDetail'
 import ReactTaggerNative from './components/ReactTaggerNative'
 import Login from './components/Login'
+import PublishPanel from './components/PublishPanel'
 import type { DataMode } from './lib/data'
 import { toClipSummary, type ClipSummary } from './lib/data/transformers'
 import type { Clip } from './lib/types'
@@ -21,6 +22,7 @@ export type TabKey =
   | 'dashboard'
   | 'detail'
   | 'extractor'
+  | 'publish'
 
 interface TabConfig {
   key: TabKey
@@ -50,6 +52,13 @@ const TABS: TabConfig[] = [
     label: 'Dashboard (React)',
     path: '/react-dashboard',
     description: 'React-native defensive analytics dashboard.',
+    showInNav: true,
+  },
+  {
+    key: 'publish',
+    label: 'Publish to Cloud',
+    path: '/publish',
+    description: 'Publish local games to cloud for coaches.',
     showInNav: true,
   },
   {
@@ -304,53 +313,59 @@ const Layout = () => {
             </span>
           </div>
 
-          <nav className="flex flex-wrap items-center gap-1.5">
-            {NAV_TABS.map((tab) => {
-              const isActive = tab.key === navActiveKey
-              const baseClasses =
-                'rounded-full px-3 py-1.5 text-[0.8rem] font-medium transition duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/40'
-              const activeClasses = 'bg-[#841617] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.12)]'
-              const inactiveClasses =
-                'bg-white/10 text-white/75 hover:bg-white/20 hover:text-white'
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
+            <nav className="flex flex-wrap items-center gap-1.5">
+              {NAV_TABS.filter(tab => {
+                // Hide "Publish to Cloud" tab when in cloud mode
+                if (tab.key === 'publish' && dataMode === 'cloud') return false
+                return true
+              }).map((tab) => {
+                const isActive = tab.key === navActiveKey
+                const baseClasses =
+                  'rounded-full px-3 py-1.5 text-[0.8rem] font-medium transition duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/40'
+                const activeClasses = 'bg-[#841617] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.12)]'
+                const inactiveClasses =
+                  'bg-white/10 text-white/75 hover:bg-white/20 hover:text-white'
 
-              return (
-                <Link
-                  to={tab.path}
-                  key={tab.key}
-                  aria-label={`Open ${tab.label}`}
-                  className={`${baseClasses} ${isActive ? activeClasses : inactiveClasses}`}
-                >
-                  {tab.label}
-                </Link>
-              )
-            })}
-          </nav>
+                return (
+                  <Link
+                    to={tab.path}
+                    key={tab.key}
+                    aria-label={`Open ${tab.label}`}
+                    className={`${baseClasses} ${isActive ? activeClasses : inactiveClasses}`}
+                  >
+                    {tab.label}
+                  </Link>
+                )
+              })}
+            </nav>
 
-          <div className="flex items-center gap-3">
-            {/* Database Mode Toggle */}
-            <button
-              onClick={toggleDataMode}
-              className="rounded-full bg-white/10 px-3 py-1.5 text-[0.75rem] font-medium transition hover:bg-white/20 flex items-center gap-2"
-              title={`Switch to ${dataMode === 'local' ? 'cloud' : 'local'} mode`}
-            >
-              <span className={`w-2 h-2 rounded-full ${dataMode === 'cloud' ? 'bg-green-400' : 'bg-gray-400'}`} />
-              {dataMode === 'local' ? '💻 Local' : '☁️ Cloud'}
-            </button>
+            <div className="flex items-center gap-3">
+              {/* Database Mode Toggle */}
+              <button
+                onClick={toggleDataMode}
+                className="rounded-full bg-white/10 px-3 py-1.5 text-[0.75rem] font-medium transition hover:bg-white/20 flex items-center gap-2"
+                title={`Switch to ${dataMode === 'local' ? 'cloud' : 'local'} mode`}
+              >
+                <span className={`w-2 h-2 rounded-full ${dataMode === 'cloud' ? 'bg-green-400' : 'bg-gray-400'}`} />
+                {dataMode === 'local' ? '💻 Local' : '☁️ Cloud'}
+              </button>
 
-            {/* User Info / Logout */}
-            {dataMode === 'cloud' && isAuthenticated && (
-              <div className="flex items-center gap-2">
-                <span className="text-[0.75rem] text-white/60">
-                  {username} ({role})
-                </span>
-                <button
-                  onClick={handleLogout}
-                  className="rounded-full bg-white/10 px-3 py-1.5 text-[0.75rem] font-medium transition hover:bg-red-500/20 hover:text-red-300"
-                >
-                  Logout
-                </button>
-              </div>
-            )}
+              {/* User Info / Logout */}
+              {dataMode === 'cloud' && isAuthenticated && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[0.75rem] text-white/60">
+                    {username} ({role})
+                  </span>
+                  <button
+                    onClick={handleLogout}
+                    className="rounded-full bg-white/10 px-3 py-1.5 text-[0.75rem] font-medium transition hover:bg-red-500/20 hover:text-red-300"
+                  >
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -445,6 +460,7 @@ function App() {
           {/* React Pages */}
           <Route path="/react-clips" element={<ReactClipsPanelWrapper />} />
           <Route path="/react-dashboard" element={<ReactDashboardWrapper />} />
+          <Route path="/publish" element={<PublishPanel />} />
           <Route path="/react-game/:gameId" element={<ReactGameDetailWrapper />} />
           <Route path="/react-detail/:clipId" element={<ReactClipDetailWrapper />} />
           <Route path="/react-tagger-native" element={<ReactTaggerNative />} />

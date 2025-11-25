@@ -93,9 +93,25 @@ def derive_video_url(filename, fallback=None):
     return None
 
 @app.route('/')
-def dashboard():
-    """Serve the main dashboard"""
-    return send_from_directory(BASE_DIR, 'CLIP_DASHBOARD_UPDATED.html')
+def index():
+    """Serve React app"""
+    ui_dist = PROJECT_ROOT / 'ui' / 'dist'
+    if ui_dist.exists() and (ui_dist / 'index.html').exists():
+        return send_from_directory(ui_dist, 'index.html')
+    else:
+        return jsonify({'error': 'React app not built yet. Run: cd ui && npm run build'}), 404
+
+@app.route('/<path:path>')
+def serve_react_app(path):
+    """Serve React app static files"""
+    ui_dist = PROJECT_ROOT / 'ui' / 'dist'
+    file_path = ui_dist / path
+    if file_path.exists() and file_path.is_file():
+        return send_from_directory(ui_dist, path)
+    # For client-side routing, return index.html
+    elif (ui_dist / 'index.html').exists():
+        return send_from_directory(ui_dist, 'index.html')
+    return jsonify({'error': 'File not found'}), 404
 
 @app.route('/clip_detail.html')
 def clip_detail():

@@ -19,6 +19,8 @@ const connectionLabel = {
   offline: 'Offline',
 } as const
 
+const PREVIEW_FRAME_TIME = 0.25
+
 const ReactClipDetail = ({ dataMode, onBack, summary }: ReactClipDetailProps) => {
   const { clipId } = useParams<{ clipId: string }>()
   const navigate = useNavigate()
@@ -28,6 +30,8 @@ const ReactClipDetail = ({ dataMode, onBack, summary }: ReactClipDetailProps) =>
   const [error, setError] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const previewPrimedRef = useRef(false)
+  const previewPrimingRef = useRef(false)
+  const userPlaybackResetRef = useRef(false)
   const adapterFactory = useMemo(() => (dataMode === 'cloud' ? createCloudAdapter : createLocalAdapter), [dataMode])
 
   const handleEditClip = () => {
@@ -91,7 +95,6 @@ const ReactClipDetail = ({ dataMode, onBack, summary }: ReactClipDetailProps) =>
 
   const activeClip = clip ?? (summary ? (normalizeClip(summary) as Clip) : null)
   const locationLabel = activeClip ? resolveLocationLabel(activeClip) : '—'
-  const points = activeClip?.points ?? 0
   const breakdown = activeClip?.breakdown
   const stop = breakdown ? !breakdown.toLowerCase().startsWith('y') : true
   const actionsProvided = activeClip?.actions !== undefined
@@ -112,54 +115,83 @@ const ReactClipDetail = ({ dataMode, onBack, summary }: ReactClipDetailProps) =>
 
   useEffect(() => {
     previewPrimedRef.current = false
+    previewPrimingRef.current = false
+    userPlaybackResetRef.current = false
   }, [activeVideoUrl])
 
   const primeVideoPreview = useCallback(() => {
     const video = videoRef.current
     if (!video || previewPrimedRef.current) return
     if (video.readyState < 2) return
-    previewPrimedRef.current = true
+    previewPrimingRef.current = true
     const originalMuted = video.muted
+    const originalTime = video.currentTime
     video.muted = true
 
-    let fallbackTimeout: number | null = null
-    const finalizePreview = () => {
-      if (fallbackTimeout) {
-        window.clearTimeout(fallbackTimeout)
-        fallbackTimeout = null
+    const playFromPreviewTime = () => {
+      const previewTime = video.duration && video.duration < PREVIEW_FRAME_TIME ? video.duration : PREVIEW_FRAME_TIME
+      video.currentTime = previewTime
+
+      const finalizePreview = () => {
+        previewPrimingRef.current = false
+        previewPrimedRef.current = true
+        userPlaybackResetRef.current = false
+        video.pause()
+        video.currentTime = previewTime
+        video.muted = originalMuted
       }
-      video.pause()
-      video.currentTime = 0
-      video.muted = originalMuted
+
+      const playPromise = video.play()
+      if (playPromise && typeof playPromise.then === 'function') {
+        playPromise
+          .then(() => {
+            const anyVideo = video as HTMLVideoElement & {
+              requestVideoFrameCallback?: (callback: () => void) => number
+            }
+            if (typeof anyVideo.requestVideoFrameCallback === 'function') {
+              anyVideo.requestVideoFrameCallback(() => finalizePreview())
+            } else {
+              const handleFrame = () => {
+                video.removeEventListener('timeupdate', handleFrame)
+                finalizePreview()
+              }
+              video.addEventListener('timeupdate', handleFrame, { once: true })
+              window.setTimeout(() => {
+                video.removeEventListener('timeupdate', handleFrame)
+                finalizePreview()
+              }, 400)
+            }
+          })
+          .catch(() => {
+            previewPrimedRef.current = false
+            previewPrimingRef.current = false
+            video.currentTime = originalTime
+            video.muted = originalMuted
+          })
+      } else {
+        finalizePreview()
+      }
     }
 
-    const playPromise = video.play()
-    if (playPromise && typeof playPromise.then === 'function') {
-      playPromise
-        .then(() => {
-          const anyVideo = video as HTMLVideoElement & {
-            requestVideoFrameCallback?: (callback: () => void) => number
-          }
-          if (typeof anyVideo.requestVideoFrameCallback === 'function') {
-            anyVideo.requestVideoFrameCallback(() => finalizePreview())
-          } else {
-            const handleFrame = () => {
-              video.removeEventListener('timeupdate', handleFrame)
-              finalizePreview()
-            }
-            video.addEventListener('timeupdate', handleFrame, { once: true })
-            fallbackTimeout = window.setTimeout(() => {
-              video.removeEventListener('timeupdate', handleFrame)
-              finalizePreview()
-            }, 400)
-          }
-        })
-        .catch(() => {
-          previewPrimedRef.current = false
-          video.muted = originalMuted
-        })
+    const handleSeeked = () => {
+      video.removeEventListener('seeked', handleSeeked)
+      playFromPreviewTime()
+    }
+
+    if (video.currentTime === 0) {
+      handleSeeked()
     } else {
-      finalizePreview()
+      video.addEventListener('seeked', handleSeeked, { once: true })
+      video.currentTime = 0
+    }
+  }, [])
+
+  const handleUserPlay = useCallback(() => {
+    const video = videoRef.current
+    if (!video) return
+    if (previewPrimedRef.current && !previewPrimingRef.current && !userPlaybackResetRef.current) {
+      userPlaybackResetRef.current = true
+      video.currentTime = 0
     }
   }, [])
 
@@ -260,6 +292,7 @@ const ReactClipDetail = ({ dataMode, onBack, summary }: ReactClipDetailProps) =>
                 playsInline
                 onLoadedMetadata={primeVideoPreview}
                 onLoadedData={primeVideoPreview}
+                onPlay={handleUserPlay}
               />
             ) : (
               <div className="video-placeholder">No video reference found for this clip.</div>
