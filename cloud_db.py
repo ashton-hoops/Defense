@@ -2,8 +2,8 @@
 PostgreSQL Database Adapter for Cloud Environment
 Provides same interface as analytics_db.py but uses PostgreSQL
 """
-import psycopg2
-import psycopg2.extras
+import psycopg
+from psycopg.rows import dict_row
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -111,8 +111,7 @@ CREATE_STATEMENTS = [
 
 def get_connection():
     """Get PostgreSQL connection with dict cursor"""
-    conn = psycopg2.connect(DATABASE_URL)
-    conn.cursor_factory = psycopg2.extras.RealDictCursor
+    conn = psycopg.connect(DATABASE_URL, row_factory=dict_row)
     return conn
 
 
