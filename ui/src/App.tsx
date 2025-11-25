@@ -56,9 +56,9 @@ const TABS: TabConfig[] = [
   },
   {
     key: 'publish',
-    label: 'Publish to Cloud',
+    label: 'Sync to Cloud',
     path: '/publish',
-    description: 'Publish local games to cloud for coaches.',
+    description: 'Sync local database to cloud for coaches.',
     showInNav: true,
   },
   {

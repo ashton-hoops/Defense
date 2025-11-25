@@ -6,10 +6,10 @@ import './PublishPanel.css'
 
 export default function PublishPanel() {
   const [localGames, setLocalGames] = useState<Game[]>([])
-  const [publishing, setPublishing] = useState<string | null>(null)
-  const [publishedGames, setPublishedGames] = useState<Set<string>>(new Set())
+  const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [progress, setProgress] = useState<string>('')
 
   const localAdapter = createLocalAdapter()
   const cloudAdapter = createCloudAdapter()
@@ -28,40 +28,52 @@ export default function PublishPanel() {
     }
   }
 
-  const publishGame = async (gameId: string) => {
-    setPublishing(gameId)
+  const syncAllToCloud = async () => {
+    setSyncing(true)
     setError(null)
     setSuccess(null)
+    setProgress('')
 
     try {
-      // Fetch all clips for this game from local database
-      const response = await localAdapter.listClips({ gameId })
-      const clips = response.items
+      // Fetch ALL clips from local database
+      setProgress('Loading clips from local database...')
+      const response = await localAdapter.listClips()
+      const allClips = response.items
 
-      if (clips.length === 0) {
-        throw new Error('No clips found for this game')
+      if (allClips.length === 0) {
+        throw new Error('No clips found in local database')
       }
+
+      setProgress(`Syncing ${allClips.length} clips to cloud...`)
 
       // Upload each clip to cloud
-      for (const clip of clips) {
+      let synced = 0
+      for (const clip of allClips) {
         await cloudAdapter.saveClip(clip)
+        synced++
+        if (synced % 5 === 0 || synced === allClips.length) {
+          setProgress(`Synced ${synced} of ${allClips.length} clips...`)
+        }
       }
 
-      setPublishedGames(prev => new Set([...prev, gameId]))
-      setSuccess(`Successfully published ${clips.length} clips for this game!`)
+      setSuccess(`✓ Successfully synced ${allClips.length} clips to cloud!`)
+      setProgress('')
     } catch (err: any) {
-      console.error('Failed to publish game:', err)
-      setError(err.message || 'Failed to publish game')
+      console.error('Failed to sync:', err)
+      setError(err.message || 'Failed to sync to cloud')
+      setProgress('')
     } finally {
-      setPublishing(null)
+      setSyncing(false)
     }
   }
+
+  const totalClips = localGames.reduce((sum, game) => sum + game.clipCount, 0)
 
   return (
     <div className="publish-panel">
       <div className="publish-header">
-        <h2>Publish Games to Cloud</h2>
-        <p>Select games to share with coaches. Your local data remains unchanged.</p>
+        <h2>Sync to Cloud</h2>
+        <p>Push your entire local database to the cloud. Coaches will see all your latest work.</p>
       </div>
 
       {error && (
@@ -76,47 +88,56 @@ export default function PublishPanel() {
         </div>
       )}
 
-      <div className="games-grid">
+      {progress && (
+        <div className="publish-alert publish-alert-info">
+          {progress}
+        </div>
+      )}
+
+      <div className="sync-section">
         {localGames.length === 0 ? (
           <div className="empty-state">
             <p>No games found in local database.</p>
-            <p>Tag some clips first, then come back here to publish them.</p>
+            <p>Tag some clips first, then come back here to sync them.</p>
           </div>
         ) : (
-          localGames.map((game) => {
-            const isPublished = publishedGames.has(game.id)
-            const isPublishing = publishing === game.id
-
-            return (
-              <div key={game.id} className="game-card">
-                <div className="game-info">
-                  <h3>{game.opponent || 'Unknown Opponent'}</h3>
-                  <div className="game-details">
-                    <span>{game.location}</span>
-                    <span>•</span>
-                    <span>{game.clipCount} clips</span>
-                  </div>
+          <>
+            <div className="local-summary">
+              <h3>Local Database</h3>
+              <div className="stats">
+                <div className="stat">
+                  <span className="stat-value">{localGames.length}</span>
+                  <span className="stat-label">Games</span>
                 </div>
-
-                <button
-                  onClick={() => publishGame(game.id)}
-                  disabled={isPublishing}
-                  className={`publish-button ${isPublished ? 'published' : ''}`}
-                >
-                  {isPublishing ? (
-                    <>
-                      <span className="spinner" />
-                      Publishing...
-                    </>
-                  ) : isPublished ? (
-                    <>✓ Published</>
-                  ) : (
-                    <>☁️ Publish to Cloud</>
-                  )}
-                </button>
+                <div className="stat">
+                  <span className="stat-value">{totalClips}</span>
+                  <span className="stat-label">Clips</span>
+                </div>
               </div>
-            )
-          })
+              <ul className="games-list">
+                {localGames.map((game) => (
+                  <li key={game.id}>
+                    {game.opponent} - {game.clipCount} clips
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <button
+              onClick={syncAllToCloud}
+              disabled={syncing}
+              className="sync-button"
+            >
+              {syncing ? (
+                <>
+                  <span className="spinner" />
+                  Syncing...
+                </>
+              ) : (
+                <>☁️ Sync All to Cloud</>
+              )}
+            </button>
+          </>
         )}
       </div>
     </div>
