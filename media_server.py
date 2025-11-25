@@ -3,8 +3,30 @@ import requests
 from flask_cors import CORS
 from pathlib import Path
 import json
+import os
 
-from analytics_db import fetch_clips, fetch_clip, upsert_clip, get_connection, remove_game
+# Import cloud config to detect environment
+try:
+    from cloud_config import is_cloud, is_local
+    CLOUD_AVAILABLE = True
+except ImportError:
+    CLOUD_AVAILABLE = False
+    def is_cloud(): return False
+    def is_local(): return True
+
+# Use cloud_db in cloud, analytics_db locally
+if CLOUD_AVAILABLE and is_cloud():
+    print("🌩️  Running in CLOUD mode - using PostgreSQL")
+    from cloud_db import fetch_clips, fetch_clip, upsert_clip, get_connection, remove_game, init_db
+    # Initialize cloud database tables on startup
+    try:
+        init_db()
+        print("✅ Cloud database initialized")
+    except Exception as e:
+        print(f"⚠️  Database initialization error: {e}")
+else:
+    print("💻 Running in LOCAL mode - using SQLite")
+    from analytics_db import fetch_clips, fetch_clip, upsert_clip, get_connection, remove_game
 
 # Try to import semantic search - graceful fallback if not available
 try:
@@ -769,6 +791,40 @@ def api_search_status():
         "openai_available": OPENAI_AVAILABLE,
         "api_key_set": bool(os.environ.get('OPENAI_API_KEY'))
     })
+
+
+@app.route('/api/auth/login', methods=['POST'])
+def api_login():
+    """Login endpoint - returns JWT token"""
+    try:
+        # Import auth module
+        from auth import authenticate_user, create_jwt_token
+
+        data = request.get_json()
+        username = data.get('username', '').strip()
+        password = data.get('password', '')
+
+        if not username or not password:
+            return jsonify({'error': 'Username and password required'}), 400
+
+        # Authenticate user
+        user = authenticate_user(username, password)
+
+        if not user:
+            return jsonify({'error': 'Invalid credentials'}), 401
+
+        # Create JWT token
+        token = create_jwt_token(user['username'], user['role'])
+
+        return jsonify({
+            'token': token,
+            'username': user['username'],
+            'role': user['role']
+        })
+
+    except Exception as e:
+        print(f"❌ Login error: {e}")
+        return jsonify({'error': 'Login failed'}), 500
 
 
 if __name__ == '__main__':

@@ -19,17 +19,6 @@ const connectionLabel = {
   offline: 'Offline',
 } as const
 
-const POSTER_CACHE_PREFIX = 'clipPoster:'
-
-const getSessionStorage = () => {
-  if (typeof window === 'undefined') return null
-  try {
-    return window.sessionStorage
-  } catch {
-    return null
-  }
-}
-
 const ReactClipDetail = ({ dataMode, onBack, summary }: ReactClipDetailProps) => {
   const { clipId } = useParams<{ clipId: string }>()
   const navigate = useNavigate()
@@ -38,7 +27,7 @@ const ReactClipDetail = ({ dataMode, onBack, summary }: ReactClipDetailProps) =>
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  const [posterImage, setPosterImage] = useState<string | null>(null)
+  const previewPrimedRef = useRef(false)
   const adapterFactory = useMemo(() => (dataMode === 'cloud' ? createCloudAdapter : createLocalAdapter), [dataMode])
 
   const handleEditClip = () => {
@@ -108,7 +97,6 @@ const ReactClipDetail = ({ dataMode, onBack, summary }: ReactClipDetailProps) =>
   const actionsProvided = activeClip?.actions !== undefined
   const clipActions = activeClip?.actions ?? []
   const activeVideoUrl = activeClip?.videoUrl ?? null
-  const posterCacheKey = activeVideoUrl ? `${POSTER_CACHE_PREFIX}${activeVideoUrl}` : null
 
   const actionTypesFromActions = (() => {
     if (!clipActions.length) return null
@@ -123,58 +111,57 @@ const ReactClipDetail = ({ dataMode, onBack, summary }: ReactClipDetailProps) =>
   const actionCountValue = actionsProvided ? clipActions.length : activeClip?.actionCount ?? activeClip?.actionDensity
 
   useEffect(() => {
-    if (!activeVideoUrl) {
-      setPosterImage(null)
-      return
-    }
-    if (posterCacheKey) {
-      const storage = getSessionStorage()
-      if (storage) {
-        try {
-          const cached = storage.getItem(posterCacheKey)
-          if (cached) {
-            setPosterImage(cached)
-            return
-          }
-        } catch (err) {
-          console.warn('Unable to read poster cache', err)
-        }
-      }
-    }
-    setPosterImage(null)
-  }, [activeVideoUrl, posterCacheKey])
+    previewPrimedRef.current = false
+  }, [activeVideoUrl])
 
-  const capturePosterFrame = useCallback(() => {
-    if (posterImage) return
+  const primeVideoPreview = useCallback(() => {
     const video = videoRef.current
-    if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) return
-    const canvas = document.createElement('canvas')
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-    try {
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.9)
-      setPosterImage(dataUrl)
-      if (posterCacheKey) {
-        const storage = getSessionStorage()
-        if (storage) {
-          try {
-            storage.setItem(posterCacheKey, dataUrl)
-          } catch (err) {
-            console.warn('Unable to cache poster image', err)
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('Failed to capture poster frame', err)
-    }
-  }, [posterCacheKey, posterImage])
+    if (!video || previewPrimedRef.current) return
+    if (video.readyState < 2) return
+    previewPrimedRef.current = true
+    const originalMuted = video.muted
+    video.muted = true
 
-  const handleVideoLoaded = useCallback(() => {
-    capturePosterFrame()
-  }, [capturePosterFrame])
+    let fallbackTimeout: number | null = null
+    const finalizePreview = () => {
+      if (fallbackTimeout) {
+        window.clearTimeout(fallbackTimeout)
+        fallbackTimeout = null
+      }
+      video.pause()
+      video.currentTime = 0
+      video.muted = originalMuted
+    }
+
+    const playPromise = video.play()
+    if (playPromise && typeof playPromise.then === 'function') {
+      playPromise
+        .then(() => {
+          const anyVideo = video as HTMLVideoElement & {
+            requestVideoFrameCallback?: (callback: () => void) => number
+          }
+          if (typeof anyVideo.requestVideoFrameCallback === 'function') {
+            anyVideo.requestVideoFrameCallback(() => finalizePreview())
+          } else {
+            const handleFrame = () => {
+              video.removeEventListener('timeupdate', handleFrame)
+              finalizePreview()
+            }
+            video.addEventListener('timeupdate', handleFrame, { once: true })
+            fallbackTimeout = window.setTimeout(() => {
+              video.removeEventListener('timeupdate', handleFrame)
+              finalizePreview()
+            }, 400)
+          }
+        })
+        .catch(() => {
+          previewPrimedRef.current = false
+          video.muted = originalMuted
+        })
+    } else {
+      finalizePreview()
+    }
+  }, [])
 
   const formatShotLocation = () => {
     if (activeClip?.shotX == null || activeClip?.shotY == null) return '—'
@@ -271,10 +258,8 @@ const ReactClipDetail = ({ dataMode, onBack, summary }: ReactClipDetailProps) =>
                 className="clip-video"
                 preload="auto"
                 playsInline
-                crossOrigin="anonymous"
-                poster={posterImage ?? undefined}
-                onLoadedMetadata={handleVideoLoaded}
-                onLoadedData={handleVideoLoaded}
+                onLoadedMetadata={primeVideoPreview}
+                onLoadedData={primeVideoPreview}
               />
             ) : (
               <div className="video-placeholder">No video reference found for this clip.</div>
