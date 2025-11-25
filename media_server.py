@@ -863,8 +863,10 @@ def api_login():
         })
 
     except Exception as e:
+        import traceback
         print(f"❌ Login error: {e}")
-        return jsonify({'error': 'Login failed'}), 500
+        traceback.print_exc()
+        return jsonify({'error': 'Login failed', 'details': str(e)}), 500
 
 
 if __name__ == '__main__':
