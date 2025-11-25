@@ -840,7 +840,10 @@ def api_login():
         # Import auth module
         from auth import authenticate_user, create_jwt_token
 
-        data = request.get_json()
+        data = request.get_json(force=True)
+        if not data:
+            return jsonify({'error': 'No JSON data provided'}), 400
+
         username = data.get('username', '').strip()
         password = data.get('password', '')
 
