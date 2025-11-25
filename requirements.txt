@@ -3,7 +3,7 @@ Flask==3.0.0
 flask-cors==4.0.0
 
 # Database
-psycopg[binary]==3.1.18  # PostgreSQL adapter (Python 3.13 compatible)
+psycopg[binary]==3.2.13  # PostgreSQL adapter (Python 3.13 compatible)
 
 # Authentication
 PyJWT==2.8.0            # JWT tokens
