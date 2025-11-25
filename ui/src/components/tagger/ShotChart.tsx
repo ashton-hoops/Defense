@@ -11,6 +11,14 @@ type ShotChartProps = {
   onClear: () => void
 }
 
+const mapDesignationToColorKey = (designation?: string | null) => {
+  const normalized = (designation || '').toLowerCase()
+  if (normalized.startsWith('blue') || normalized === 'primary') return 'primary'
+  if (normalized.startsWith('green') || normalized === 'shooter') return 'shooter'
+  if (normalized.startsWith('black') || normalized === 'role') return 'role'
+  return normalized
+}
+
 export const ShotChart = ({
   shotX,
   shotY,
@@ -38,84 +46,32 @@ export const ShotChart = ({
   const parsedX = shotX ? parseFloat(shotX) : null
   const parsedY = shotY ? parseFloat(shotY) : null
   const hasShot = parsedX !== null && parsedY !== null
+  const normalizedShotResult = (shotResult || '').toLowerCase()
+  const isFgMake = normalizedShotResult === 'make' || normalizedShotResult === 'made fg'
+  const isFgMiss = normalizedShotResult === 'miss' || normalizedShotResult === 'missed fg'
+  const isFtMake = normalizedShotResult === 'made ft'
+  const isFtMiss = normalizedShotResult === 'missed ft'
+  const isMake = isFgMake || isFtMake
+  const isMiss = isFgMiss || isFtMiss
+  const playerColorKey = mapDesignationToColorKey(playerDesignation)
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
-      {/* Controls */}
-      <div className="flex flex-shrink-0 flex-col gap-2">
-        {/* Player Designation Row */}
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-gray-400">Player Designation (Left Half):</span>
-          <div className="flex gap-2">
-            <button
-              onClick={() => onPlayerDesignationChange('primary')}
-              className={`rounded px-3 py-1.5 text-xs font-medium transition ${
-                playerDesignation === 'primary'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-neutral-800 text-gray-300 hover:bg-neutral-700'
-              }`}
-            >
-              🔵 Primary
-            </button>
-            <button
-              onClick={() => onPlayerDesignationChange('shooter')}
-              className={`rounded px-3 py-1.5 text-xs font-medium transition ${
-                playerDesignation === 'shooter'
-                  ? 'bg-green-600 text-white'
-                  : 'bg-neutral-800 text-gray-300 hover:bg-neutral-700'
-              }`}
-            >
-              🟢 Shooter
-            </button>
-            <button
-              onClick={() => onPlayerDesignationChange('role')}
-              className={`rounded px-3 py-1.5 text-xs font-medium transition ${
-                playerDesignation === 'role'
-                  ? 'bg-gray-600 text-white'
-                  : 'bg-neutral-800 text-gray-300 hover:bg-neutral-700'
-              }`}
-            >
-              ⚫ Role
-            </button>
-          </div>
+    <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden">
+      {/* Header with buttons matching Play-by-Play Filter style */}
+      <div className="flex flex-shrink-0 gap-3">
+        <div className="rounded bg-neutral-800 px-3 py-2 text-xs">
+          Shot Chart
         </div>
-
-        {/* Shot Result Row */}
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-gray-400">Shot Result (Right Half):</span>
-          <div className="flex gap-2">
-            <button
-              onClick={() => onShotResultChange('make')}
-              className={`rounded px-3 py-1.5 text-xs font-medium transition ${
-                shotResult === 'make'
-                  ? 'bg-green-600 text-white'
-                  : 'bg-neutral-800 text-gray-300 hover:bg-neutral-700'
-              }`}
-            >
-              🟩 Make
-            </button>
-            <button
-              onClick={() => onShotResultChange('miss')}
-              className={`rounded px-3 py-1.5 text-xs font-medium transition ${
-                shotResult === 'miss'
-                  ? 'bg-red-600 text-white'
-                  : 'bg-neutral-800 text-gray-300 hover:bg-neutral-700'
-              }`}
-            >
-              🟥 Miss
-            </button>
-            <button
-              onClick={onClear}
-              className="rounded bg-neutral-800 px-3 py-1.5 text-xs hover:bg-neutral-700"
-            >
-              Clear Shot
-            </button>
-          </div>
-        </div>
+        <button
+          onClick={onClear}
+          className="rounded bg-neutral-800 px-3 py-2 text-xs hover:bg-neutral-700"
+        >
+          Clear
+        </button>
       </div>
 
-      {/* Court */}
-      <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-[#2a2a2a]">
+      {/* Court - larger */}
+      <div className="relative flex-1 overflow-hidden rounded-lg border border-[#2a2a2a]">
         <div
           className="relative h-full w-full cursor-crosshair"
           onClick={handleCourtClick}
@@ -125,7 +81,7 @@ export const ShotChart = ({
           <img
             src="/shot-chart.png"
             alt="Basketball Court"
-            className="h-full w-full object-contain"
+            className="h-full w-full object-contain object-center"
             draggable={false}
           />
 
@@ -146,12 +102,12 @@ export const ShotChart = ({
                 <path
                   d="M 10,2 A 8,8 0 0,1 10,18 Z"
                   fill={
-                    playerDesignation === 'primary'
+                    playerColorKey === 'primary'
                       ? '#3b82f6'
-                      : playerDesignation === 'shooter'
+                      : playerColorKey === 'shooter'
                         ? '#22c55e'
-                        : playerDesignation === 'role'
-                          ? '#1f2937'
+                        : playerColorKey === 'role'
+                          ? '#0a0a0a'
                           : '#6b7280'
                   }
                 />
@@ -160,9 +116,9 @@ export const ShotChart = ({
                 <path
                   d="M 10,2 A 8,8 0 0,0 10,18 Z"
                   fill={
-                    shotResult === 'make'
+                    isMake
                       ? '#22c55e'
-                      : shotResult === 'miss'
+                      : isMiss
                         ? '#ef4444'
                         : '#6b7280'
                   }
@@ -178,14 +134,98 @@ export const ShotChart = ({
         </div>
       </div>
 
-      {/* Info */}
-      {hasShot && (
-        <div className="flex-shrink-0 text-xs text-gray-400">
-          Shot location: ({parsedX.toFixed(1)}%, {parsedY.toFixed(1)}%)
-          {playerDesignation && ` • ${playerDesignation.charAt(0).toUpperCase() + playerDesignation.slice(1)}`}
-          {shotResult && ` • ${shotResult.toUpperCase()}`}
+      {/* Controls below court - enlarged */}
+      <div className="flex flex-shrink-0 flex-col gap-4">
+        {/* Shooter Designation Section */}
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-semibold text-gray-300 uppercase tracking-wide">Shooter Designation</span>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => onPlayerDesignationChange('primary')}
+              className={`flex items-center gap-2 text-sm font-medium transition hover:opacity-80 ${
+                playerColorKey === 'primary' ? 'text-blue-400' : 'text-gray-400'
+              }`}
+            >
+              <svg width="16" height="16" viewBox="0 0 20 20" className="flex-shrink-0">
+                <circle cx="10" cy="10" r="9" fill="#1f1f1f" />
+                <path d="M 10,1 A 9,9 0 0,1 10,19 Z" fill="#3b82f6" />
+              </svg>
+              Primary Player
+            </button>
+            <button
+              onClick={() => onPlayerDesignationChange('shooter')}
+              className={`flex items-center gap-2 text-sm font-medium transition hover:opacity-80 ${
+                playerColorKey === 'shooter' ? 'text-green-400' : 'text-gray-400'
+              }`}
+            >
+              <svg width="16" height="16" viewBox="0 0 20 20" className="flex-shrink-0">
+                <circle cx="10" cy="10" r="9" fill="#1f1f1f" />
+                <path d="M 10,1 A 9,9 0 0,1 10,19 Z" fill="#22c55e" />
+              </svg>
+              Shooter
+            </button>
+            <button
+              onClick={() => onPlayerDesignationChange('role')}
+              className={`flex items-center gap-2 text-sm font-medium transition hover:opacity-80 ${
+                playerColorKey === 'role' ? 'text-white' : 'text-gray-400'
+              }`}
+            >
+              <svg width="16" height="16" viewBox="0 0 20 20" className="flex-shrink-0">
+                <circle cx="10" cy="10" r="9" fill="#1f1f1f" />
+                <path d="M 10,1 A 9,9 0 0,1 10,19 Z" fill="#0a0a0a" />
+              </svg>
+              Role Player
+            </button>
+          </div>
         </div>
-      )}
+
+        {/* Shot Result Section */}
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-semibold text-gray-300 uppercase tracking-wide">Shot Result</span>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => onShotResultChange('Made FG')}
+              className={`flex items-center gap-2 text-sm font-medium transition hover:opacity-80 ${
+                isFgMake ? 'text-green-400' : 'text-gray-400'
+              }`}
+            >
+              <svg width="16" height="16" viewBox="0 0 20 20" className="flex-shrink-0">
+                <circle cx="10" cy="10" r="9" fill="#1f1f1f" />
+                <path d="M 10,1 A 9,9 0 0,0 10,19 Z" fill="#22c55e" />
+              </svg>
+              Made FG
+            </button>
+            <button
+              onClick={() => onShotResultChange('Missed FG')}
+              className={`flex items-center gap-2 text-sm font-medium transition hover:opacity-80 ${
+                isFgMiss ? 'text-red-400' : 'text-gray-400'
+              }`}
+            >
+              <svg width="16" height="16" viewBox="0 0 20 20" className="flex-shrink-0">
+                <circle cx="10" cy="10" r="9" fill="#1f1f1f" />
+                <path d="M 10,1 A 9,9 0 0,0 10,19 Z" fill="#ef4444" />
+              </svg>
+              Missed FG
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Info - fixed height to prevent layout shift */}
+      <div className="flex-shrink-0 text-[12px] text-gray-300 h-[24px] leading-[24px] whitespace-nowrap overflow-hidden text-ellipsis">
+        {hasShot && (
+          <>
+            Shot location: ({parsedX.toFixed(1)}, {parsedY.toFixed(1)})
+            {playerDesignation && ` • ${
+              playerDesignation === 'primary' ? 'Primary Player' :
+              playerDesignation === 'shooter' ? 'Shooter' :
+              playerDesignation === 'role' ? 'Role Player' :
+              playerDesignation.charAt(0).toUpperCase() + playerDesignation.slice(1)
+            }`}
+            {shotResult && ` • ${shotResult.toUpperCase()}`}
+          </>
+        )}
+      </div>
     </div>
   )
 }

@@ -29,7 +29,7 @@ CREATE_STATEMENTS = [
         formation TEXT,
         play_name TEXT,
         scout_coverage TEXT,
-        action_trigger TEXT,
+        play_trigger TEXT,
         action_types TEXT,
         action_sequence TEXT,
         coverage TEXT,
@@ -49,9 +49,11 @@ CREATE_STATEMENTS = [
         shot_x TEXT,
         shot_y TEXT,
         shot_result TEXT,
+        player_designation TEXT,
         notes TEXT,
         start_time TEXT,
         end_time TEXT,
+        actions_json TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
@@ -103,6 +105,19 @@ def init_db() -> None:
         for stmt in CREATE_STATEMENTS:
             cur.execute(stmt)
 
+        # Migration: Add player_designation column if it doesn't exist
+        cur.execute("PRAGMA table_info(clips)")
+        columns = [col['name'] for col in cur.fetchall()]
+        if 'player_designation' not in columns:
+            cur.execute("ALTER TABLE clips ADD COLUMN player_designation TEXT")
+        if 'play_trigger' not in columns:
+            if 'action_trigger' in columns:
+                cur.execute("ALTER TABLE clips RENAME COLUMN action_trigger TO play_trigger")
+            else:
+                cur.execute("ALTER TABLE clips ADD COLUMN play_trigger TEXT")
+        if 'actions_json' not in columns:
+            cur.execute("ALTER TABLE clips ADD COLUMN actions_json TEXT")
+
 
 def upsert_clip(clip: Dict[str, Any]) -> None:
     """
@@ -113,24 +128,27 @@ def upsert_clip(clip: Dict[str, Any]) -> None:
     normalized.setdefault("created_at", now)
     normalized["updated_at"] = now
 
+    # Debug: log what we're about to save
+    with open('/tmp/upsert_debug.log', 'a') as f:
+        f.write(f"upsert_clip called with location={clip.get('location')}, game_score={clip.get('game_score')}\n")
+
     columns = [
         "id",
         "filename",
         "path",
+        "source_video",
         "game_id",
         "canonical_game_id",
         "canonical_clip_id",
         "opponent",
         "opponent_slug",
-        "location",
-        "game_score",
         "quarter",
         "possession",
         "situation",
         "formation",
         "play_name",
         "scout_coverage",
-        "action_trigger",
+        "play_trigger",
         "action_types",
         "action_sequence",
         "coverage",
@@ -155,6 +173,10 @@ def upsert_clip(clip: Dict[str, Any]) -> None:
         "end_time",
         "created_at",
         "updated_at",
+        "location",
+        "game_score",
+        "player_designation",
+        "actions_json",
     ]
 
     placeholders = ", ".join("?" for _ in columns)
@@ -162,15 +184,34 @@ def upsert_clip(clip: Dict[str, Any]) -> None:
 
     values = [normalized.get(col) for col in columns]
 
+    # Debug: log the actual values being inserted
+    with open('/tmp/upsert_debug.log', 'a') as f:
+        f.write(f"  Values for location (index {columns.index('location')}): {values[columns.index('location')]}\n")
+        f.write(f"  Values for game_score (index {columns.index('game_score')}): {values[columns.index('game_score')]}\n")
+        # Show a snippet of the SQL
+        sql_snippet = f"INSERT INTO clips ({', '.join(columns[:5])}...{', '.join(columns[-5:])}) VALUES ..."
+        f.write(f"  SQL: {sql_snippet}\n")
+        f.write(f"  Total columns: {len(columns)}, Total values: {len(values)}\n")
+        # Check if location and game_score are in the update assignments
+        f.write(f"  'location' in assignments: {'location=excluded.location' in assignments}\n")
+        f.write(f"  'game_score' in assignments: {'game_score=excluded.game_score' in assignments}\n")
+
     with db_cursor() as cur:
-        cur.execute(
-            f"""
+        sql = f"""
             INSERT INTO clips ({", ".join(columns)})
             VALUES ({placeholders})
             ON CONFLICT(id) DO UPDATE SET {assignments}
-            """,
-            values,
-        )
+            """
+
+        # Debug: Write the actual SQL and values to file
+        with open('/tmp/sql_debug.log', 'w') as f:
+            f.write("SQL Statement:\n")
+            f.write(sql + "\n\n")
+            f.write("Values:\n")
+            for i, (col, val) in enumerate(zip(columns, values)):
+                f.write(f"{i}: {col} = {repr(val)}\n")
+
+        cur.execute(sql, values)
 
 
 def upsert_comm_segments(clip_id: str, segments: Iterable[Dict[str, Any]]) -> None:
@@ -226,6 +267,31 @@ def fetch_comm_segments(clip_id: str) -> List[Dict[str, Any]]:
 def remove_clip(clip_id: str) -> None:
     with db_cursor() as cur:
         cur.execute("DELETE FROM clips WHERE id = ?", (clip_id,))
+
+
+def remove_game(game_identifier: Any, canonical_game_id: Optional[str] = None) -> int:
+    """
+    Delete every clip tied to a game. Matches on numeric game_id when provided and optionally on canonical_game_id.
+    Returns how many DB rows were removed.
+    """
+    deleted = 0
+    normalized_game_id: Optional[int] = None
+    if game_identifier is not None:
+        try:
+            stringified = str(game_identifier).strip()
+            if stringified:
+                normalized_game_id = int(stringified)
+        except (ValueError, TypeError):
+            normalized_game_id = None
+
+    with db_cursor() as cur:
+        if normalized_game_id is not None:
+            cur.execute("DELETE FROM clips WHERE game_id = ?", (normalized_game_id,))
+            deleted += cur.rowcount or 0
+        if canonical_game_id:
+            cur.execute("DELETE FROM clips WHERE canonical_game_id = ?", (canonical_game_id,))
+            deleted += cur.rowcount or 0
+    return deleted
 
 
 def import_clips(records: Iterable[Dict[str, Any]]) -> None:

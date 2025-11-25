@@ -37,6 +37,10 @@ const ReactClipsPanel = ({ dataMode, onOpenClip, refreshKey = 0 }: ReactClipsPan
   const [editingClip, setEditingClip] = useState<Clip | null>(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [expandedGames, setExpandedGames] = useState<Set<string>>(new Set())
+  const [semanticSearchEnabled, setSemanticSearchEnabled] = useState(false)
+  const [semanticSearching, setSemanticSearching] = useState(false)
+  const [semanticQuery, setSemanticQuery] = useState('')
+  const [deletingGameId, setDeletingGameId] = useState<string | null>(null)
 
   const adapterFactory = useMemo(() => (dataMode === 'cloud' ? createCloudAdapter : createLocalAdapter), [dataMode])
 
@@ -178,6 +182,38 @@ const ReactClipsPanel = ({ dataMode, onOpenClip, refreshKey = 0 }: ReactClipsPan
     setSearchTerm('')
     setLocationFilter('all')
     setShotFilter('all')
+    setSemanticSearchEnabled(false)
+    setSemanticQuery('')
+  }
+
+  const handleSemanticSearch = async () => {
+    if (!semanticQuery.trim()) return
+
+    setSemanticSearching(true)
+    setError(null)
+
+    try {
+      const response = await fetch('http://127.0.0.1:8000/api/search/semantic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: semanticQuery, top_k: 50 }),
+      })
+
+      const data = await response.json()
+
+      if (data.ok && data.results) {
+        const summaries = data.results.map(toClipSummary)
+        setClips(summaries)
+        setSemanticSearchEnabled(true)
+      } else {
+        setError(data.error || 'Semantic search failed')
+      }
+    } catch (err) {
+      console.error('Semantic search error:', err)
+      setError('Semantic search not available. Make sure OpenAI API key is set.')
+    } finally {
+      setSemanticSearching(false)
+    }
   }
 
   const toggleGame = (gameKey: string) => {
@@ -190,6 +226,42 @@ const ReactClipsPanel = ({ dataMode, onOpenClip, refreshKey = 0 }: ReactClipsPan
       }
       return next
     })
+  }
+
+  const refreshClips = async () => {
+    const adapter = adapterFactory()
+    const result = await adapter.listClips()
+    const summaries = result.items.map(toClipSummary)
+    setClips(summaries)
+  }
+
+  const handleDeleteGame = async (gameKey: string) => {
+    const normalized = gameKey?.toString().trim()
+    if (!normalized || normalized === '—') {
+      alert('Unable to delete this group because the game number is missing.')
+      return
+    }
+    const confirmDelete = window.confirm(
+      `Delete all clips for Game ${normalized}? This will remove ${normalized} from the dashboard permanently.`,
+    )
+    if (!confirmDelete) return
+
+    setDeletingGameId(normalized)
+    try {
+      const adapter = adapterFactory()
+      await adapter.deleteGame(normalized)
+      await refreshClips()
+      setExpandedGames((prev) => {
+        const next = new Set(prev)
+        next.delete(normalized)
+        return next
+      })
+    } catch (err) {
+      console.error('Failed to delete game', err)
+      alert('Failed to delete game. Please try again.')
+    } finally {
+      setDeletingGameId((current) => (current === normalized ? null : current))
+    }
   }
 
   const handleDeleteClip = async (clipId: string) => {
@@ -243,7 +315,7 @@ const ReactClipsPanel = ({ dataMode, onOpenClip, refreshKey = 0 }: ReactClipsPan
     if (updates.formation !== undefined) payload.formation = updates.formation
     if (updates.playName !== undefined) payload.play_name = updates.playName
     if (updates.scoutCoverage !== undefined) payload.scout_coverage = updates.scoutCoverage
-    if (updates.actionTrigger !== undefined) payload.action_trigger = updates.actionTrigger
+    if (updates.playTrigger !== undefined) payload.play_trigger = updates.playTrigger
     if (updates.actionTypes !== undefined) payload.action_types = updates.actionTypes
     if (updates.actionSequence !== undefined) payload.action_sequence = updates.actionSequence
     if (updates.coverage !== undefined) payload.coverage = updates.coverage
@@ -302,43 +374,79 @@ const ReactClipsPanel = ({ dataMode, onOpenClip, refreshKey = 0 }: ReactClipsPan
         {error && <span className="text-xs text-rose-300">{error}</span>}
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-3 rounded-xl border border-white/10 bg-[#151515] px-4 py-4 text-sm text-white">
-        <input
-          className="min-w-[200px] flex-1 rounded-lg border border-white/10 bg-[#1a1a1a] px-3 py-2 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-[#841617]"
-          type="search"
-          placeholder="Search clips (ID, opponent, result, notes…)"
-          value={searchTerm}
-          onChange={(event) => setSearchTerm(event.target.value)}
-        />
-        <select
-          className="rounded-lg border border-white/10 bg-[#1a1a1a] px-3 py-2 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-[#841617]"
-          value={locationFilter}
-          onChange={(event) => setLocationFilter(event.target.value)}
-        >
-          <option value="all">All locations</option>
-          {availableLocations.map((location) => (
-            <option key={location} value={location}>
-              {location}
-            </option>
-          ))}
-        </select>
-        <select
-          className="rounded-lg border border-white/10 bg-[#1a1a1a] px-3 py-2 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-[#841617]"
-          value={shotFilter}
-          onChange={(event) => setShotFilter(event.target.value as typeof shotFilter)}
-        >
-          <option value="all">All clips</option>
-          <option value="with">With shot data</option>
-          <option value="without">Without shot data</option>
-        </select>
-        <button
-          type="button"
-          onClick={clearFilters}
-          disabled={!filtersActive}
-          className="rounded-full border border-white/12 bg-white/10 px-3 py-2 text-xs uppercase tracking-[0.2em] text-white transition hover:bg-white/16 disabled:cursor-not-allowed disabled:text-white/40"
-        >
-          Clear filters
-        </button>
+      <div className="mt-4 flex flex-col gap-3 rounded-xl border border-white/10 bg-[#151515] px-4 py-4 text-sm text-white">
+        <div className="flex flex-wrap gap-3">
+          <div className="relative min-w-[300px] flex-1">
+            <input
+              className="w-full rounded-lg border border-white/10 bg-[#1a1a1a] px-3 py-2 pr-24 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-[#841617]"
+              type="search"
+              placeholder="🤖 AI Search: 'Horns actions with drop coverage that led to made 3s'"
+              value={semanticQuery}
+              onChange={(event) => setSemanticQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  handleSemanticSearch()
+                }
+              }}
+            />
+            <button
+              type="button"
+              onClick={handleSemanticSearch}
+              disabled={!semanticQuery.trim() || semanticSearching}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md border border-[#841617] bg-[#841617] px-3 py-1 text-xs font-medium uppercase tracking-wider text-white transition hover:bg-[#9a1819] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {semanticSearching ? 'Searching…' : 'Search'}
+            </button>
+          </div>
+          {semanticSearchEnabled && (
+            <span className="flex items-center gap-2 rounded-full border border-emerald-400/40 bg-emerald-500/20 px-3 py-1 text-xs uppercase tracking-[0.3em] text-emerald-100">
+              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+              AI Results
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-3 border-t border-white/5 pt-3">
+          <input
+            className="min-w-[200px] flex-1 rounded-lg border border-white/10 bg-[#1a1a1a] px-3 py-2 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-[#841617]"
+            type="search"
+            placeholder="Filter by keyword (ID, opponent, result, notes…)"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            disabled={semanticSearchEnabled}
+          />
+          <select
+            className="rounded-lg border border-white/10 bg-[#1a1a1a] px-3 py-2 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-[#841617]"
+            value={locationFilter}
+            onChange={(event) => setLocationFilter(event.target.value)}
+            disabled={semanticSearchEnabled}
+          >
+            <option value="all">All locations</option>
+            {availableLocations.map((location) => (
+              <option key={location} value={location}>
+                {location}
+              </option>
+            ))}
+          </select>
+          <select
+            className="rounded-lg border border-white/10 bg-[#1a1a1a] px-3 py-2 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-[#841617]"
+            value={shotFilter}
+            onChange={(event) => setShotFilter(event.target.value as typeof shotFilter)}
+            disabled={semanticSearchEnabled}
+          >
+            <option value="all">All clips</option>
+            <option value="with">With shot data</option>
+            <option value="without">Without shot data</option>
+          </select>
+          <button
+            type="button"
+            onClick={clearFilters}
+            disabled={!filtersActive && !semanticSearchEnabled}
+            className="rounded-full border border-white/12 bg-white/10 px-3 py-2 text-xs uppercase tracking-[0.2em] text-white transition hover:bg-white/16 disabled:cursor-not-allowed disabled:text-white/40"
+          >
+            Clear all
+          </button>
+        </div>
       </div>
 
       <div className="mt-4 flex-1 overflow-hidden rounded-xl border border-white/10 bg-[#151515]">
@@ -353,8 +461,17 @@ const ReactClipsPanel = ({ dataMode, onOpenClip, refreshKey = 0 }: ReactClipsPan
             </div>
           ) : (
             clipsByGame.map(([gameKey, gameClips]) => {
+              const normalizedGameKey = gameKey?.toString().trim()
               const isExpanded = expandedGames.has(gameKey)
               const firstClip = gameClips[0]
+              const isDeleting = normalizedGameKey ? deletingGameId === normalizedGameKey : false
+              const detailSegments = [
+                firstClip.opponent,
+                firstClip.locationLabel,
+                firstClip.gameScore && firstClip.gameScore !== '—'
+                  ? firstClip.gameScore
+                  : firstClip.gameDateDisplay,
+              ].filter((segment) => segment && segment !== '—')
               return (
                 <div key={gameKey} className="border-b border-white/5 last:border-none">
                   <button
@@ -363,6 +480,13 @@ const ReactClipsPanel = ({ dataMode, onOpenClip, refreshKey = 0 }: ReactClipsPan
                     className="flex w-full items-center gap-4 bg-[#1a1a1a] px-4 py-3 text-left transition hover:bg-[#1f1f1f]"
                   >
                     <span className="text-lg text-white/40">{isExpanded ? '▼' : '▶'}</span>
+                    <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-[#1f1f1f]">
+                      <img
+                        src="/ou-logo.png"
+                        alt="OU"
+                        className="h-12 w-12 object-contain"
+                      />
+                    </div>
                     <div>
                       <div className="flex items-center gap-3">
                         <span className="text-sm font-semibold uppercase tracking-widest text-white/90">
@@ -373,7 +497,7 @@ const ReactClipsPanel = ({ dataMode, onOpenClip, refreshKey = 0 }: ReactClipsPan
                         </span>
                       </div>
                       <div className="mt-1 text-xs text-white/50">
-                        {firstClip.opponent} · {firstClip.locationLabel} · {firstClip.gameDateDisplay}
+                        {detailSegments.length ? detailSegments.join(' · ') : '—'}
                       </div>
                     </div>
                   </button>
@@ -382,13 +506,35 @@ const ReactClipsPanel = ({ dataMode, onOpenClip, refreshKey = 0 }: ReactClipsPan
                       <thead className="bg-[#181818] text-xs uppercase text-white/50">
                         <tr>
                           <th className="px-4 py-2 text-left font-medium tracking-wider">Clip ID</th>
-                          <th className="px-4 py-2 text-left font-medium tracking-wider">Date</th>
-                          <th className="px-4 py-2 text-left font-medium tracking-wider">Result</th>
-                          <th className="px-4 py-2 text-left font-medium tracking-wider">Shooter</th>
-                          <th className="px-4 py-2 text-left font-medium tracking-wider">Shot</th>
-                          <th className="px-4 py-2 text-left font-medium tracking-wider">Notes</th>
-                          <th className="px-4 py-2 text-left font-medium tracking-wider">Saved</th>
+                          <th className="px-4 py-2 text-center font-medium tracking-wider transform -translate-x-1">Result</th>
+                          <th className="px-4 py-2 text-center font-medium tracking-wider transform -translate-x-1">Shooter</th>
+                          <th className="px-4 py-2 text-center font-medium tracking-wider transform -translate-x-1">Shot</th>
+                          <th className="px-4 py-2 text-center font-medium tracking-wider transform -translate-x-1">Notes</th>
+                          <th className="px-4 py-2 text-center font-medium tracking-wider transform -translate-x-1">Saved</th>
                           <th className="px-4 py-2 text-left font-medium tracking-wider">Actions</th>
+                          <th
+                            className="px-4 py-2 text-center font-semibold tracking-[0.35em]"
+                            style={{ color: '#841617' }}
+                          >
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                handleDeleteGame(gameKey)
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                  event.preventDefault()
+                                  event.stopPropagation()
+                                  handleDeleteGame(gameKey)
+                                }
+                              }}
+                              className={`cursor-pointer uppercase tracking-[0.25em] ${(!normalizedGameKey || normalizedGameKey === '—' || isDeleting) ? 'pointer-events-none opacity-40' : ''}`}
+                            >
+                              {isDeleting ? 'Deleting…' : 'Delete Game'}
+                            </span>
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -407,10 +553,9 @@ const ReactClipsPanel = ({ dataMode, onOpenClip, refreshKey = 0 }: ReactClipsPan
                                 clip.id
                               )}
                             </td>
-                            <td className="px-4 py-3 text-white/70">{clip.gameDateDisplay}</td>
-                            <td className="px-4 py-3 text-white/80">{clip.playResult}</td>
-                            <td className="px-4 py-3 text-white/80">{clip.shooterDesignation}</td>
-                            <td className="px-4 py-3 text-white/80">
+                            <td className="px-4 py-3 text-white/80 text-center transform -translate-x-1">{clip.playResult}</td>
+                            <td className="px-4 py-3 text-white/80 text-center transform -translate-x-1">{clip.shooterDesignation}</td>
+                            <td className="px-4 py-3 text-white/80 text-center transform -translate-x-1">
                               {clip.hasShot ? (
                                 <span className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-2 py-1 text-xs text-white/80">
                                   Shot
@@ -420,8 +565,8 @@ const ReactClipsPanel = ({ dataMode, onOpenClip, refreshKey = 0 }: ReactClipsPan
                                 <span className="text-white/50">—</span>
                               )}
                             </td>
-                            <td className="px-4 py-3 text-white/70">{clip.notesPreview}</td>
-                            <td className="px-4 py-3 text-white/70">{clip.savedAtDisplay}</td>
+                            <td className="px-4 py-3 text-white/70 text-center transform -translate-x-1">{clip.notesPreview}</td>
+                            <td className="px-4 py-3 text-white/70 text-center transform -translate-x-1">{clip.savedAtDisplay}</td>
                             <td className="px-4 py-3">
                               <button
                                 type="button"
@@ -432,6 +577,18 @@ const ReactClipsPanel = ({ dataMode, onOpenClip, refreshKey = 0 }: ReactClipsPan
                                 className="rounded-lg border border-white/12 bg-white/10 px-3 py-1.5 text-xs uppercase tracking-[0.15em] text-white transition hover:bg-white/16"
                               >
                                 Edit
+                              </button>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  handleDeleteClip(clip.id)
+                                }}
+                                className="rounded-lg border border-[#841617]/60 bg-transparent px-3 py-1.5 text-xs uppercase tracking-[0.15em] text-[#841617] transition hover:bg-[#841617]/10"
+                              >
+                                Delete Clip
                               </button>
                             </td>
                           </tr>

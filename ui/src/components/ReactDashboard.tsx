@@ -28,7 +28,7 @@ type FilterState = Record<FilterKey, Set<string>>
 type SearchFilters = {
   formation: string
   playName: string
-  actionTrigger: string
+  playTrigger: string
   actionTypes: string
   actionSequence: string
   breakdownDetail: string
@@ -264,13 +264,21 @@ const getLocationDetailText = (label?: string | null, tag?: LocationTag): string
   if (tagLabel && trimmed.toLowerCase() === tagLabel.toLowerCase()) return null
   return trimmed
 }
-const ReactDashboard = ({ dataMode, onSelectGame }: ReactDashboardProps) => {
+type ReactDashboardProps = {
+  dataMode: DataMode
+  onSelectGame?: (gameId: string) => void
+  refreshKey?: number
+}
+
+const ReactDashboard = ({ dataMode, onSelectGame, refreshKey }: ReactDashboardProps) => {
   const [clips, setClips] = useState<Clip[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [searchTerm, setSearchTerm] = useState('')
   const [locationFilter, setLocationFilter] = useState<LocationFilter>('all')
+  const [semanticSearchEnabled, setSemanticSearchEnabled] = useState(false)
+  const [semanticSearching, setSemanticSearching] = useState(false)
   const [filterPanelOpen, setFilterPanelOpen] = useState(false)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = { 'game-scope': true, 'tag-search': true }
@@ -286,7 +294,7 @@ const ReactDashboard = ({ dataMode, onSelectGame }: ReactDashboardProps) => {
   const [searchFilters, setSearchFilters] = useState<SearchFilters>({
     formation: '',
     playName: '',
-    actionTrigger: '',
+    playTrigger: '',
     actionTypes: '',
     actionSequence: '',
     breakdownDetail: '',
@@ -330,7 +338,36 @@ const ReactDashboard = ({ dataMode, onSelectGame }: ReactDashboardProps) => {
     return () => {
       cancelled = true
     }
-  }, [adapterFactory, dataMode])
+  }, [adapterFactory, dataMode, refreshKey])
+
+  const handleSemanticSearch = async () => {
+    if (!searchTerm.trim()) return
+
+    setSemanticSearching(true)
+    setError(null)
+
+    try {
+      const response = await fetch('http://127.0.0.1:8000/api/search/semantic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: searchTerm, top_k: 100 }),
+      })
+
+      const data = await response.json()
+
+      if (data.ok && data.results) {
+        setClips(data.results)
+        setSemanticSearchEnabled(true)
+      } else {
+        setError(data.error || 'Semantic search failed')
+      }
+    } catch (err) {
+      console.error('Semantic search error:', err)
+      setError('AI Search unavailable. Make sure API key is configured.')
+    } finally {
+      setSemanticSearching(false)
+    }
+  }
 
   const filteredClips = useMemo(() => {
     const hasFilters = DASHBOARD_FILTER_GROUPS.some((group) => filters[group.key].size > 0)
@@ -368,7 +405,7 @@ const ReactDashboard = ({ dataMode, onSelectGame }: ReactDashboardProps) => {
         }
         if (!matchField(clip.formation, searchFilters.formation)) return false
         if (!matchField(clip.playName, searchFilters.playName)) return false
-        if (!matchField(clip.actionTrigger, searchFilters.actionTrigger)) return false
+        if (!matchField(clip.playTrigger, searchFilters.playTrigger)) return false
         if (!matchField(clip.actionTypes, searchFilters.actionTypes)) return false
         if (!matchField(clip.actionSequence, searchFilters.actionSequence)) return false
         if (!matchField(clip.breakdown, searchFilters.breakdownDetail)) return false
@@ -441,7 +478,7 @@ const ReactDashboard = ({ dataMode, onSelectGame }: ReactDashboardProps) => {
     setSearchFilters({
       formation: '',
       playName: '',
-      actionTrigger: '',
+      playTrigger: '',
       actionTypes: '',
       actionSequence: '',
       breakdownDetail: '',
@@ -492,7 +529,7 @@ const ReactDashboard = ({ dataMode, onSelectGame }: ReactDashboardProps) => {
       'Offensive Formation',
       'Play Name',
       'Covered in Scout?',
-      'Action Trigger',
+      'Play Trigger',
       'Action Type(s)',
       'Action Sequence',
       'Defensive Coverage',
@@ -524,7 +561,7 @@ const ReactDashboard = ({ dataMode, onSelectGame }: ReactDashboardProps) => {
       clip.formation || '',
       clip.playName || '',
       clip.scoutCoverage || '',
-      clip.actionTrigger || '',
+      clip.playTrigger || '',
       clip.actionTypes || '',
       clip.actionSequence || '',
       clip.coverage || '',
@@ -718,13 +755,36 @@ const ReactDashboard = ({ dataMode, onSelectGame }: ReactDashboardProps) => {
           </div>
         </div>
 
-        <div className="search-box">
-          <input
-            type="search"
-            placeholder="Search by game, opponent, or location…"
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-          />
+        <div className="ai-search-box">
+          <div className="ai-search-input-wrapper">
+            <input
+              type="search"
+              placeholder="AI Search: 'Horns actions with drop coverage that led to made 3s'"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && searchTerm.trim()) {
+                  // Trigger AI search
+                  handleSemanticSearch()
+                }
+              }}
+              className="ai-search-input"
+            />
+            <button
+              type="button"
+              onClick={handleSemanticSearch}
+              disabled={!searchTerm.trim() || semanticSearching}
+              className="ai-search-button"
+            >
+              {semanticSearching ? 'Searching…' : 'Search'}
+            </button>
+          </div>
+          {semanticSearchEnabled && (
+            <span className="ai-search-badge">
+              <span className="ai-badge-dot" />
+              AI Results Active
+            </span>
+          )}
         </div>
       </div>
 
@@ -769,22 +829,26 @@ const ReactDashboard = ({ dataMode, onSelectGame }: ReactDashboardProps) => {
                   const cy = Math.max(0, Math.min(100, clip.shotY ?? 0))
                   const playerDesignation = (clip.playerDesignation || '').toLowerCase()
                   const shotResult = (clip.shotResult || '').toLowerCase()
+                  const isShotMake = shotResult === 'make' || shotResult === 'made fg' || shotResult === 'made ft'
+                  const isShotMiss = shotResult === 'miss' || shotResult === 'missed fg' || shotResult === 'missed ft'
+                  const designationKey = playerDesignation.startsWith('blue')
+                    ? 'primary'
+                    : playerDesignation.startsWith('green')
+                      ? 'shooter'
+                      : playerDesignation.startsWith('black')
+                        ? 'role'
+                        : playerDesignation
 
                   const playerColor =
-                    playerDesignation === 'primary'
+                    designationKey === 'primary'
                       ? '#3b82f6'
-                      : playerDesignation === 'shooter'
+                      : designationKey === 'shooter'
                         ? '#22c55e'
-                        : playerDesignation === 'role'
+                        : designationKey === 'role'
                           ? '#1f2937'
                           : '#6b7280'
 
-                  const resultColor =
-                    shotResult === 'make'
-                      ? '#22c55e'
-                      : shotResult === 'miss'
-                        ? '#ef4444'
-                        : '#6b7280'
+                  const resultColor = isShotMake ? '#22c55e' : isShotMiss ? '#ef4444' : '#6b7280'
 
                   return (
                     <g
@@ -1056,12 +1120,12 @@ const ReactDashboard = ({ dataMode, onSelectGame }: ReactDashboardProps) => {
                 />
               </div>
               <div className="filter-search-field">
-                <label>Action Trigger</label>
+                <label>Play Trigger</label>
                 <input
                   type="search"
                   placeholder="e.g. Entry, DHO"
-                  value={searchFilters.actionTrigger}
-                  onChange={(event) => handleSearchChange('actionTrigger', event.target.value)}
+                  value={searchFilters.playTrigger}
+                  onChange={(event) => handleSearchChange('playTrigger', event.target.value)}
                 />
               </div>
               <div className="filter-search-field">

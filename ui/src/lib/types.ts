@@ -1,3 +1,38 @@
+export type TagAction = {
+  phase: string
+  type: string
+  coverage: string
+  help: string
+  breakdown: string
+  communication: string
+  outcome: string
+}
+
+export type ShooterDesignationLists = {
+  bluePerimeter: string
+  bluePost: string
+  green: string
+}
+
+export type ParsedPossession = {
+  number: number
+  startClock: string
+  endClock: string
+  startLabel: string
+  resultLabel: string
+  endDescription: string
+  playResult?: string
+  points?: number
+  reboundOutcome?: string
+  hasShot?: 'Yes' | 'No'
+  shotResult?: string
+  shotDescription?: string
+  shotSummary?: string
+  shooterName?: string
+  shooterDesignation?: string
+  playerDesignation?: string
+}
+
 export type Clip = {
   id: string
   gameId: string
@@ -5,6 +40,7 @@ export type Clip = {
   gameNumber?: string | number
   opponent?: string
   filename?: string
+  sourceVideo?: string
   location?: string
   locationDisplay?: string
   gameLocation?: string
@@ -15,7 +51,7 @@ export type Clip = {
   formation?: string
   playName?: string
   scoutCoverage?: string
-  actionTrigger?: string
+  playTrigger?: string
   actionTypes?: string
   actionSequence?: string
   coverage?: string
@@ -48,6 +84,7 @@ export type Clip = {
   savedAt?: string
   createdAt?: string
   updatedAt?: string
+  actions?: TagAction[]
 }
 
 export type Game = {
@@ -87,13 +124,9 @@ export type TagFields = {
   offFormation: string
   playName: string
   scoutTag: string
+  playTrigger: string
   actionTrigger: string
-  actionTypes: string
-  actionSeq: string
   coverage: string
-  ballScreenCov: string
-  offBallScreenCov: string
-  helpRotation: string
   defDisruption: string
   defBreakdown: string
   playResult: string
@@ -116,6 +149,7 @@ export type QueueEntry = {
   __gameId: string
   __opponent: string
   __selected: boolean
+  __actions?: TagAction[]
   'Game #': string
   Location: string
   Opponent: string
@@ -125,13 +159,9 @@ export type QueueEntry = {
   'Offensive Formation': string
   'Play Name': string
   'Covered in Scout?': string
+  'Play Trigger': string
   'Action Trigger': string
-  'Action Type(s)': string
-  'Action Sequence': string
   'Defensive Coverage': string
-  'Ball Screen Coverage': string
-  'Off-Ball Screen Coverage': string
-  'Help/Rotation': string
   'Defensive Disruption': string
   'Defensive Breakdown': string
   'Play Result': string

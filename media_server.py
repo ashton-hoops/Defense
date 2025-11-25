@@ -4,7 +4,16 @@ from flask_cors import CORS
 from pathlib import Path
 import json
 
-from analytics_db import fetch_clips, fetch_clip, upsert_clip, get_connection
+from analytics_db import fetch_clips, fetch_clip, upsert_clip, get_connection, remove_game
+
+# Try to import semantic search - graceful fallback if not available
+try:
+    from semantic_search import semantic_search, rebuild_embeddings, OPENAI_AVAILABLE
+    SEMANTIC_SEARCH_AVAILABLE = True
+except ImportError:
+    SEMANTIC_SEARCH_AVAILABLE = False
+    OPENAI_AVAILABLE = False
+    print("⚠️  Semantic search not available. Install: pip install openai numpy")
 
 app = Flask(__name__)
 CORS(app)
@@ -16,6 +25,29 @@ CLIPS_DIR = PROJECT_ROOT / "Clips"
 METADATA_FILE = CLIPS_DIR / "clips_metadata.json"
 BRIDGE_CTRL_BASE = "http://127.0.0.1:5000"
 BRIDGE_APP_BASE = "http://127.0.0.1:5001"
+
+
+def parse_actions(raw):
+    if isinstance(raw, str):
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return []
+    if isinstance(raw, list):
+        normalized = []
+        for entry in raw:
+            if not isinstance(entry, dict):
+                continue
+            normalized.append({
+                'phase': entry.get('phase', ''),
+                'type': entry.get('type', ''),
+                'coverage': entry.get('coverage', ''),
+                'help': entry.get('help', ''),
+                'breakdown': entry.get('breakdown', ''),
+                'communication': entry.get('communication', ''),
+            })
+        return normalized
+    return []
 
 def derive_video_url(filename, fallback=None):
     for raw in (filename, fallback):
@@ -57,9 +89,21 @@ def api_clips():
         # ---- POST: Add a new clip ----
         if request.method == 'POST':
             new_clip = request.get_json()
+            actions_payload = new_clip.get('actions')
+            if actions_payload is not None and not isinstance(actions_payload, str):
+                try:
+                    new_clip['actions_json'] = json.dumps(actions_payload)
+                except (TypeError, ValueError):
+                    new_clip['actions_json'] = json.dumps([])
+            elif 'actions_json' not in new_clip:
+                new_clip['actions_json'] = json.dumps([])
 
-            # Debug: log the fields we care about
-            print(f"🐛 Received clip data - formation: {new_clip.get('formation')}, coverage: {new_clip.get('coverage')}, ball_screen: {new_clip.get('ball_screen')}, off_ball_screen: {new_clip.get('off_ball_screen')}, disruption: {new_clip.get('disruption')}")
+            # Debug: log the fields we care about to a file
+            with open('/tmp/backend_debug.log', 'a') as f:
+                f.write(f"🐛 Received clip data - location: {new_clip.get('location')}, game_score: {new_clip.get('game_score')}\n")
+                f.write(f"   Full clip keys: {list(new_clip.keys())}\n")
+
+            print(f"🐛 Received clip data - location: {new_clip.get('location')}, game_score: {new_clip.get('game_score')}, formation: {new_clip.get('formation')}, coverage: {new_clip.get('coverage')}, ball_screen: {new_clip.get('ball_screen')}, off_ball_screen: {new_clip.get('off_ball_screen')}, disruption: {new_clip.get('disruption')}", flush=True)
 
             # Save to SQLite database
             try:
@@ -121,6 +165,8 @@ def update_metadata_clip(clip_id: str, updates: dict):
         'notes': 'Notes',
         'result': 'Play Result',
         'shooter': 'Shooter Designation',
+        'play_trigger': 'Play Trigger',
+        'action_trigger': 'Play Trigger',
         'has_shot': 'Has Shot',
         'shot_x': 'Shot X',
         'shot_y': 'Shot Y',
@@ -160,6 +206,63 @@ def load_metadata_clip(clip_id: str):
         if entry.get('id') == clip_id:
             return entry
     return None
+
+
+def remove_game_from_metadata(game_identifier, canonical_game_id=None):
+    if not METADATA_FILE.exists():
+        return 0
+
+    def _normalize(value):
+        if value is None:
+            return None
+        stringified = str(value).strip()
+        return stringified or None
+
+    target_game_id = _normalize(game_identifier)
+    target_canonical_id = _normalize(canonical_game_id)
+
+    try:
+        with open(METADATA_FILE, 'r') as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return 0
+
+    clips = data.get('clips', [])
+
+    def matches(entry: dict) -> bool:
+        entry_game_values = [
+            entry.get('game_id'),
+            entry.get('gameId'),
+            entry.get('Game #'),
+            entry.get('game_num'),
+            entry.get('gameNumber'),
+        ]
+        entry_canonical_values = [
+            entry.get('canonical_game_id'),
+            entry.get('canonicalGameId'),
+            entry.get('__gameId'),
+        ]
+        normalized_game_values = {_normalize(value) for value in entry_game_values if _normalize(value)}
+        normalized_canonical_values = {_normalize(value) for value in entry_canonical_values if _normalize(value)}
+
+        if target_game_id and target_game_id in normalized_game_values:
+            return True
+        if target_canonical_id and target_canonical_id in normalized_canonical_values:
+            return True
+        return False
+
+    filtered = [entry for entry in clips if not matches(entry)]
+    removed = len(clips) - len(filtered)
+
+    if removed > 0:
+        data['clips'] = filtered
+        try:
+            with open(METADATA_FILE, 'w') as f:
+                json.dump(data, f, indent=2)
+        except OSError:
+            pass
+
+    return removed
 
 
 @app.route('/api/clip/<clip_id>', methods=['GET', 'PUT', 'DELETE'])
@@ -240,7 +343,8 @@ def api_clip_detail(clip_id):
                 'formation': 'formation',
                 'play_name': 'play_name',
                 'scout_coverage': 'scout_coverage',
-                'action_trigger': 'action_trigger',
+                'play_trigger': 'play_trigger',
+                'action_trigger': 'play_trigger',  # backward compatibility
                 'action_types': 'action_types',
                 'action_sequence': 'action_sequence',
                 'coverage': 'coverage',
@@ -308,7 +412,10 @@ def transform_clip(clip):
         'offensive_formation': clip.get('formation'),
         'play_name': clip.get('playName'),
         'scout_coverage': clip.get('scoutCoverage'),
-        'action_trigger': clip.get('actionTrigger'),
+        'play_trigger': clip.get('playTrigger')
+        or clip.get('Play Trigger')
+        or clip.get('actionTrigger')
+        or clip.get('Action Trigger'),
         'action_types': clip.get('actionTypes'),
         'action_sequence': clip.get('actionSequence'),
         'defensive_coverage': clip.get('coverage'),
@@ -335,7 +442,8 @@ def transform_clip(clip):
         'location_display': location_display,
         'location_code': location_code,
         'game_location': location_code,
-        'locationLabel': location_display
+        'locationLabel': location_display,
+        'actions': parse_actions(clip.get('actions') or clip.get('actions_json')),
     }
 
 
@@ -351,6 +459,8 @@ def transform_db_clip(clip):
     return {
         'id': clip.get('id'),
         'filename': clip.get('filename'),
+        'source_video': clip.get('source_video'),
+        'path': clip.get('path'),
         'video_url': derive_video_url(clip.get('filename'), clip.get('path')),
         'game_id': clip.get('game_id'),
         'opponent': clip.get('opponent'),
@@ -361,7 +471,7 @@ def transform_db_clip(clip):
         'formation': clip.get('formation'),
         'play_name': clip.get('play_name'),
         'scout_coverage': clip.get('scout_coverage'),
-        'action_trigger': clip.get('action_trigger'),
+        'play_trigger': clip.get('play_trigger') or clip.get('action_trigger'),
         'action_types': clip.get('action_types'),
         'action_sequence': clip.get('action_sequence'),
         'coverage': clip.get('coverage'),
@@ -381,6 +491,7 @@ def transform_db_clip(clip):
         'shot_x': clip.get('shot_x'),
         'shot_y': clip.get('shot_y'),
         'shot_result': clip.get('shot_result'),
+        'player_designation': clip.get('player_designation'),
         'notes': clip.get('notes'),
         'start_time': clip.get('start_time'),
         'end_time': clip.get('end_time'),
@@ -388,7 +499,8 @@ def transform_db_clip(clip):
         'location_display': location_display,
         'location_code': location_code,
         'game_location': location_code,
-        'locationLabel': location_display
+        'locationLabel': location_display,
+        'actions': parse_actions(clip.get('actions') or clip.get('actions_json')),
     }
 
 @app.route('/api/clip/<clip_id>/shot', methods=['PUT', 'DELETE', 'OPTIONS'])
@@ -478,6 +590,25 @@ def update_clip_shot(clip_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+@app.route('/api/games/<game_id>', methods=['DELETE'])
+def api_delete_game(game_id: str):
+    """Delete all clips associated with a specific game."""
+    canonical_id = request.args.get('canonical_id')
+    normalized_game_id = (game_id or '').strip()
+    if not normalized_game_id and not canonical_id:
+        return jsonify({"error": "A game_id or canonical_id is required"}), 400
+    try:
+        deleted_from_db = remove_game(normalized_game_id or None, canonical_id)
+        deleted_from_meta = remove_game_from_metadata(normalized_game_id or None, canonical_id)
+        return jsonify({
+            "ok": True,
+            "deleted": deleted_from_db,
+            "metadata_deleted": deleted_from_meta,
+        })
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
 @app.route('/health')
 def health():
     """Health check endpoint"""
@@ -559,6 +690,85 @@ def excel_append():
         return jsonify({'ok': True, 'status': data})
     except RuntimeError as exc:
         return jsonify({'ok': False, 'error': str(exc)}), 502
+
+
+@app.route('/api/search/semantic', methods=['POST'])
+def api_semantic_search():
+    """
+    AI-powered semantic search endpoint.
+    POST body: {"query": "find all Horns actions with drop coverage", "top_k": 20}
+    """
+    if not SEMANTIC_SEARCH_AVAILABLE:
+        return jsonify({
+            "error": "Semantic search not available. Install: pip install openai numpy",
+            "available": False
+        }), 501
+
+    if not OPENAI_AVAILABLE:
+        return jsonify({
+            "error": "OpenAI library not available",
+            "available": False
+        }), 501
+
+    try:
+        data = request.get_json(force=True) or {}
+        query = data.get('query', '').strip()
+        top_k = data.get('top_k', 20)
+
+        if not query:
+            return jsonify({"error": "Query parameter required"}), 400
+
+        results = semantic_search(query, top_k=top_k)
+
+        # Transform results to match frontend expectations
+        transformed = [transform_db_clip(clip) for clip in results]
+
+        return jsonify({
+            "ok": True,
+            "query": query,
+            "count": len(transformed),
+            "results": transformed
+        })
+
+    except ValueError as e:
+        return jsonify({"error": str(e), "available": False}), 400
+    except Exception as e:
+        print(f"❌ Semantic search error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/search/rebuild-embeddings', methods=['POST'])
+def api_rebuild_embeddings():
+    """
+    Rebuild all clip embeddings. Call this when clips are added/updated.
+    """
+    if not SEMANTIC_SEARCH_AVAILABLE:
+        return jsonify({
+            "error": "Semantic search not available",
+            "available": False
+        }), 501
+
+    try:
+        result = rebuild_embeddings()
+        if result['success']:
+            return jsonify({"ok": True, **result})
+        else:
+            return jsonify({"ok": False, **result}), 500
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route('/api/search/status')
+def api_search_status():
+    """Check if semantic search is available."""
+    import os
+    return jsonify({
+        "semantic_search_available": SEMANTIC_SEARCH_AVAILABLE,
+        "openai_available": OPENAI_AVAILABLE,
+        "api_key_set": bool(os.environ.get('OPENAI_API_KEY'))
+    })
 
 
 if __name__ == '__main__':

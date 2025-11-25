@@ -55,6 +55,10 @@ export class CloudAdapter implements DataAdapter {
     // TODO: wire to future cloud API
   }
 
+  async deleteGame(_gameId: string): Promise<void> {
+    throw new Error('Cloud adapter not implemented yet')
+  }
+
   async triggerExtraction(_payload: { clipId: string }): Promise<ExtractionJob> {
     return {
       id: crypto.randomUUID(),

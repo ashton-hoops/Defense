@@ -83,10 +83,13 @@ export const aggregateGames = (clips: Clip[]): GameAggregate[] => {
 
     const { label: locationDisplay, tag: locationTag } = resolveLocationMeta(clip)
     const normalized = locationDisplay.toLowerCase()
+    // Always update location if we have a valid value (including when it's the first clip with location data)
     if (normalized && normalized !== '—') {
       entry.locationCounts[normalized] = (entry.locationCounts[normalized] ?? 0) + 1
+      // Update the location label and tag whenever we encounter a non-empty location
       entry.locationLabel = locationDisplay
-      if (entry.locationTag === 'unknown' && locationTag !== 'unknown') {
+      // Update the tag if we have a better tag than 'unknown', or if current tag is 'unknown'
+      if (locationTag !== 'unknown') {
         entry.locationTag = locationTag
       }
     }

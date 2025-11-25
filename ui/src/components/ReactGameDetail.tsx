@@ -28,7 +28,7 @@ type FilterState = Record<FilterKey, Set<string>>
 type SearchFilters = {
   formation: string
   playName: string
-  actionTrigger: string
+  playTrigger: string
   actionTypes: string
   actionSequence: string
   breakdownDetail: string
@@ -293,7 +293,7 @@ const ReactGameDetail = ({ dataMode, onBack, onOpenClip }: ReactGameDetailProps)
   const [searchFilters, setSearchFilters] = useState<SearchFilters>({
     formation: '',
     playName: '',
-    actionTrigger: '',
+    playTrigger: '',
     actionTypes: '',
     actionSequence: '',
     breakdownDetail: '',
@@ -414,7 +414,7 @@ const ReactGameDetail = ({ dataMode, onBack, onOpenClip }: ReactGameDetailProps)
         }
         if (!matchField(clip.formation, searchFilters.formation)) return false
         if (!matchField(clip.playName, searchFilters.playName)) return false
-        if (!matchField(clip.actionTrigger, searchFilters.actionTrigger)) return false
+        if (!matchField(clip.playTrigger, searchFilters.playTrigger)) return false
         if (!matchField(clip.actionTypes, searchFilters.actionTypes)) return false
         if (!matchField(clip.actionSequence, searchFilters.actionSequence)) return false
         if (!matchField(clip.breakdown, searchFilters.breakdownDetail)) return false
@@ -455,7 +455,7 @@ const ReactGameDetail = ({ dataMode, onBack, onOpenClip }: ReactGameDetailProps)
     setSearchFilters({
       formation: '',
       playName: '',
-      actionTrigger: '',
+      playTrigger: '',
       actionTypes: '',
       actionSequence: '',
       breakdownDetail: '',
@@ -616,23 +616,28 @@ const ReactGameDetail = ({ dataMode, onBack, onOpenClip }: ReactGameDetailProps)
                 const cx = Math.max(0, Math.min(100, shot.shotX ?? 0))
                 const cy = Math.max(0, Math.min(100, shot.shotY ?? 0))
                 const playerDesignation = shot.playerDesignation || ''
-                const shotResult = shot.shotResult || ''
+                const shotResult = (shot.shotResult || '').toLowerCase()
+                const isShotMake = shotResult === 'make' || shotResult === 'made fg' || shotResult === 'made ft'
+                const isShotMiss = shotResult === 'miss' || shotResult === 'missed fg' || shotResult === 'missed ft'
+                const designationKey = playerDesignation.toLowerCase().startsWith('blue')
+                  ? 'primary'
+                  : playerDesignation.toLowerCase().startsWith('green')
+                    ? 'shooter'
+                    : playerDesignation.toLowerCase().startsWith('black')
+                      ? 'role'
+                      : playerDesignation.toLowerCase()
 
                 const playerColor =
-                  playerDesignation === 'primary'
+                  designationKey === 'primary'
                     ? '#3b82f6'
-                    : playerDesignation === 'shooter'
+                    : designationKey === 'shooter'
                       ? '#22c55e'
-                      : playerDesignation === 'role'
+                      : designationKey === 'role'
                         ? '#1f2937'
                         : '#6b7280'
 
-                const resultColor =
-                  shotResult === 'make'
-                    ? '#22c55e'
-                    : shotResult === 'miss'
-                      ? '#ef4444'
-                      : '#6b7280'
+                const resultColor = isShotMake ? '#22c55e' : isShotMiss ? '#ef4444' : '#6b7280'
+                const shotDisplay = isShotMake ? 'MAKE' : isShotMiss ? 'MISS' : (shot.shotResult || 'SHOT').toUpperCase()
 
                 return (
                   <g
@@ -643,7 +648,7 @@ const ReactGameDetail = ({ dataMode, onBack, onOpenClip }: ReactGameDetailProps)
                   >
                     <title>
                       Q{shot.quarter} P{shot.possession} • {shot.playName || 'No play'} • {shot.coverage || 'No coverage'}
-{shot.shotContest ? ` • ${shot.shotContest}` : ''} • {shotResult === 'make' ? 'MAKE' : 'MISS'} • {shot.points || 0} pts
+{shot.shotContest ? ` • ${shot.shotContest}` : ''} • {shotDisplay} • {shot.points || 0} pts
                     </title>
                     {/* White outline */}
                     <circle cx={cx} cy={cy} r="1.2" fill="white" />
@@ -716,7 +721,9 @@ const ReactGameDetail = ({ dataMode, onBack, onOpenClip }: ReactGameDetailProps)
                   <div className="clip-placeholder">No preview</div>
                 )}
                 <div className="play-overlay">
-                  <div className="play-icon" />
+                  <div className="play-icon">
+                    <img src="/ou-logo.png" alt="OU" className="play-logo" />
+                  </div>
                 </div>
                 <div className="clip-badges">
                   <span className="badge badge-quarter">
@@ -857,12 +864,12 @@ const ReactGameDetail = ({ dataMode, onBack, onOpenClip }: ReactGameDetailProps)
                 />
               </div>
               <div className="filter-search-field">
-                <label>Action Trigger</label>
+                <label>Play Trigger</label>
                 <input
                   type="search"
                   placeholder="e.g. Entry, DHO"
-                  value={searchFilters.actionTrigger}
-                  onChange={(event) => handleSearchChange('actionTrigger', event.target.value)}
+                  value={searchFilters.playTrigger}
+                  onChange={(event) => handleSearchChange('playTrigger', event.target.value)}
                 />
               </div>
               <div className="filter-search-field">

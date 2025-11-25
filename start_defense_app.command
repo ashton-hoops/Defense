@@ -13,8 +13,9 @@ echo ""
 cleanup() {
     echo ""
     echo "🛑 Shutting down servers..."
-    # Kill any processes on ports 8000, 5173, 5175, 5176
+    # Kill any processes on ports 8000, 5002, 5173, 5175, 5176
     lsof -ti:8000 | xargs kill -9 2>/dev/null
+    lsof -ti:5002 | xargs kill -9 2>/dev/null
     lsof -ti:5173 | xargs kill -9 2>/dev/null
     lsof -ti:5175 | xargs kill -9 2>/dev/null
     lsof -ti:5176 | xargs kill -9 2>/dev/null
@@ -44,6 +45,7 @@ fi
 # Kill any existing servers on these ports
 echo "🧹 Cleaning up old server instances..."
 lsof -ti:8000 | xargs kill -9 2>/dev/null
+lsof -ti:5002 | xargs kill -9 2>/dev/null
 lsof -ti:5173 | xargs kill -9 2>/dev/null
 lsof -ti:5175 | xargs kill -9 2>/dev/null
 lsof -ti:5176 | xargs kill -9 2>/dev/null
@@ -60,17 +62,46 @@ python3 media_server.py > /tmp/defense_backend.log 2>&1 &
 BACKEND_PID=$!
 echo "   Backend PID: $BACKEND_PID"
 
-# Wait a moment for backend to start
-sleep 2
+# Wait for backend to start (with retries)
+echo "⏳ Waiting for backend to start..."
+for i in {1..10}; do
+    if lsof -ti:8000 > /dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+done
 
 # Check if backend started successfully
-if ! lsof -ti:8000 > /dev/null; then
+if ! lsof -ti:8000 > /dev/null 2>&1; then
     echo "❌ Backend failed to start. Check /tmp/defense_backend.log for errors"
     read -p "Press Enter to exit..."
     exit 1
 fi
 
 echo "✅ Backend running on http://localhost:8000"
+
+# Start Clip Extractor service
+echo "✂️  Starting Clip Extractor service..."
+python3 clip_extractor.py > /tmp/defense_extractor.log 2>&1 &
+EXTRACTOR_PID=$!
+echo "   Extractor PID: $EXTRACTOR_PID"
+
+# Wait for extractor to start
+echo "⏳ Waiting for clip extractor to start..."
+for i in {1..10}; do
+    if lsof -ti:5002 > /dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+done
+
+if ! lsof -ti:5002 > /dev/null 2>&1; then
+    echo "❌ Clip Extractor failed to start. Check /tmp/defense_extractor.log for errors"
+    read -p "Press Enter to exit..."
+    exit 1
+fi
+
+echo "✅ Clip Extractor running on http://localhost:5002"
 
 # Start React frontend
 echo "⚛️  Starting React frontend..."
@@ -106,12 +137,14 @@ open "http://localhost:$FRONTEND_PORT"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "✨ App is running!"
 echo ""
-echo "Backend:  http://localhost:8000"
-echo "Frontend: http://localhost:$FRONTEND_PORT"
+echo "Backend:        http://localhost:8000"
+echo "Clip Extractor: http://localhost:5002"
+echo "Frontend:       http://localhost:$FRONTEND_PORT"
 echo ""
 echo "📋 Logs:"
-echo "   Backend:  /tmp/defense_backend.log"
-echo "   Frontend: /tmp/defense_frontend.log"
+echo "   Backend:   /tmp/defense_backend.log"
+echo "   Extractor: /tmp/defense_extractor.log"
+echo "   Frontend:  /tmp/defense_frontend.log"
 echo ""
 echo "⚠️  KEEP THIS WINDOW OPEN"
 echo "   Closing it will stop the servers"

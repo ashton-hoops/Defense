@@ -1,5 +1,11 @@
 .DS_Store
 
+# Video files - too large for git
+Clips/
+*.mp4
+*.mov
+*.avi
+
 # Node / Vite
 ui/node_modules/
 ui/dist/
@@ -7,22 +13,36 @@ ui/dist/
 # Python
 __pycache__/
 *.pyc
+venv/
+.venv/
+*.egg-info/
 
 # Local env/config
 ui/.env*
+.env
+.env.local
 
 # Logs / temp
 *.log
 ui/npm-debug.log*
 ui/yarn-debug.log*
-ui/pnpm-debug.log*
+CODex_session_notes.txt
 
 # Clips cache
 ui/public/legacy/Clips/
 
 # Database backups (keep main DB, ignore backup copies)
 data/backups/
+backups/
+legacy_backup/
 *.backup.*.sqlite
+
+# Screenshots and PNG files
+PNG's/
+
+# Deployment and temporary files
+deploy_backend/
+defense.honorthekicks.com.txt
 
 # Misc
 Thumbs.db

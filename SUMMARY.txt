@@ -1,0 +1,217 @@
+OU WOMEN'S BASKETBALL DEFENSIVE ANALYTICS PLATFORM
+--------------------------------------------------
+
+🏀 MISSION STATEMENT
+This project quantifies defensive execution at the play and action level for
+the University of Oklahoma Women’s Basketball team. The goal is to transform
+game film into measurable insights that inform game planning, scouting, and
+player development by linking opponent actions, defensive coverages, and
+possession outcomes.
+
+--------------------------------------------------
+OVERVIEW
+A full-stack video analysis and defensive analytics system that allows coaches or me
+to tag, extract, analyze, and visualize defensive plays from film. The platform
+runs locally using React (frontend), Flask (backend), and SQLite (database),
+with AI-powered semantic search and advanced filtering.
+
+--------------------------------------------------
+IN-PROGRESS SNAPSHOT (2025-02-14)
+- Action Bar fields (Phase, Action Type, Coverage, Help, Breakdown, Communication) now honor comma/plus multi-select and append instead of overwrite; values are tokenized/deduped.
+- Floating pickers show secondary/tertiary steps for On-Ball actions and coverage, with custom scrollbar + subtle red hover state; works alongside DHO/Off-Ball lists.
+- Shooter designation auto-tagging consumes manual Blue/Green lists; Filter OU Defense re-runs designation mapping so removing names reverts to default Black.
+- Apply Shooter Lists button removed to prevent missing prop crashes; mismatch banner logic restored but feedback toast deferred.
+- Outstanding to revisit later: add dropdown presets for Action Outcome, finish coverage mismatch alerts, and polish play-filter formatting tweaks if requested.
+
+--------------------------------------------------
+TECH STACK
+Frontend
+- React 18 + TypeScript
+- React Router (hash-based navigation)
+- Vite (build + dev server)
+- Tailwind / custom CSS styling
+
+Backend
+- Flask (Python) - API server (media_server.py)
+- Flask - Clip extractor service (clip_extractor.py)
+- SQLite - Local database (analytics.sqlite)
+- FFmpeg - Video clip extraction
+- Flask-CORS - Cross-origin support
+
+AI / Data
+- OpenAI Embeddings API - semantic clip search
+- NumPy / Pandas - vector and statistical operations
+
+--------------------------------------------------
+DATA MODEL & TAGGING SCHEMA
+Each defensive possession is tagged with 40+ fields grouped into:
+
+CONTEXT / IDENTIFIERS
+Game #, Opponent, Quarter, Possession #, Situation, Location, Game Score
+
+PLAY / ACTIONS
+Play Name, Covered in Scout?, Play Trigger, Action Type(s), Action Sequence
+
+DEFENSIVE COMPONENTS
+Defensive Coverage, Ball Screen Coverage, Off-Ball Screen Coverage,
+Help/Rotation, Defensive Disruption, Defensive Breakdown
+
+RESULTS / OUTCOMES
+Play Result, Paint Touches, Shooter Designation, Shot Location, Shot Contest,
+Rebound Outcome, Points, Notes
+
+DERIVED METRICS
+Stop Flag, EPV, SOS %, Breakdown %, OREB % Allowed
+
+--------------------------------------------------
+🏷️ TAG PERSISTENCE LOGIC
+Tags that CHANGE after every save (possession-level):
+Possession #, Situation, Offensive Formation, Play Name, Covered in Scout?,
+Play Trigger, Action Type(s), Action Sequence, Defensive Coverage,
+Ball Screen Coverage, Off-Ball Screen Coverage, Help/Rotation,
+Defensive Disruption, Defensive Breakdown, Play Result, Paint Touches,
+Shooter Designation, Shot Location, Shot Contest, Rebound Outcome,
+Points, Notes.
+
+Tags that STAY the same between saves (game-level):
+Game #, Location, Opponent, Game Score, Quarter.
+
+After each save:
+- Possession # auto-increments
+- Reset changing fields to blank
+- Keep persistent fields unchanged
+
+Example React logic:
+const persistent = ["gameNumber","location","opponent","gameScore","quarter"];
+function handleSave() {
+  saveClipToQueue(tags);
+  setTags(prev => ({
+    ...pick(prev, persistent),
+    possessionNumber: prev.possessionNumber + 1
+  }));
+}
+
+--------------------------------------------------
+METRICS DEFINITIONS
+Stop Rate - % possessions allowing 0 pts or turnover
+Breakdown % - % possessions with Breakdown = Yes
+SOS % - % actions where defender was stuck on screen
+EPV Differential - Actual Pts – Expected Pts Value
+OREB % Allowed - Opponent offensive reb / total reb
+
+--------------------------------------------------
+STATISTICAL MODELING ROADMAP
+- Correlate coverage types with Stop Rate and Breakdown %
+- Regression models predicting Stops from coverage, help, and action counts
+- Analysis by quarter, location, and opponent
+- Factor analysis of defensive habits
+- Machine learning extensions for predictive scouting and communication detection
+
+--------------------------------------------------
+SYSTEM ARCHITECTURE / DATA FLOW
+YouTube / ESPN+ Game
+   │
+   ▼
+yt_to_mp4.py  →  pbp_to_defense.py
+   │
+   ▼
+ReactTaggerNative (frontend tagging)
+   │   ├─ Mark IN/OUT timestamps
+   │   └─ Tag 30+ defensive fields
+   ▼
+Flask API (media_server.py)
+   │
+   ├─ analytics_db.py  → SQLite database
+   └─ clip_extractor.py → FFmpeg → Clips/
+   ▼
+ReactDashboard / ReactClipDetail → Analytics, Filtering, CSV Export
+
+Start all services with:
+./start_defense_app.command
+(launches both Flask servers and the React Vite UI)
+
+--------------------------------------------------
+FILE & FOLDER SEMANTICS
+ui/src/components/ReactTaggerNative.tsx  - main tagging interface
+ui/src/components/ReactDashboard.tsx     - dashboard & filters
+ui/src/components/ReactClipDetail.tsx    - clip review & edits
+media_server.py                          - Flask API + database save routes
+clip_extractor.py                        - FFmpeg clip creation
+analytics_db.py                          - SQLite I/O layer
+semantic_search.py                       - embeddings + search
+Clips/                                   - saved .mp4 clips
+data/analytics.sqlite                    - main database
+start_defense_app.command                - one-click startup
+
+--------------------------------------------------
+DEVELOPER ENVIRONMENT SETUP
+Python (3.10+)
+  python3 -m venv venv
+  source venv/bin/activate
+  pip install -r requirements.txt
+
+Node (LTS)
+  cd ui
+  npm install
+  npm run dev   # localhost:5173
+
+Full App
+  ./start_defense_app.command
+
+Requires FFmpeg and an OpenAI API key in .env
+
+--------------------------------------------------
+ANALYTICAL GOALS & RESEARCH QUESTIONS
+- Which opponent actions yield highest PPP vs. each coverage?
+- How do rotations and help affect Stop Rate?
+- Do breakdowns increase in later quarters?
+- Which coverages produce best contest % and lowest OREB %?
+- Does scout preparation lower Breakdown %?
+
+--------------------------------------------------
+DATA SCIENCE / EXPORT WORKFLOW
+1. Tag plays → SQLite
+2. Export CSV (one row per possession)
+3. Convert text→numeric with mapping dictionaries
+4. Run correlations or regression
+5. Visualize Stop Rate, Breakdown %, EPV Diff
+
+Example numeric mapping (Python):
+coverage_map = {"Over":1,"Under":2,"Switch":3,"Drop":4,"Hedge":5}
+help_map = {"None":0,"Low-Man":1,"X-Out":2}
+breakdown_map = {"No":0,"Yes":1}
+
+--------------------------------------------------
+VERSIONING & BACKUPS
+- Git repository (source + schema only; clips excluded)
+- ./start_defense_app.command auto-backs up SQLite & JSON
+- Future plan: Cloudflare R2 / S3 for clips, Postgres for multi-user
+
+--------------------------------------------------
+🤖 SYSTEM CONTEXT FOR AI CODING TOOLS
+You are assisting with development of the OU Women's Basketball Defensive
+Analytics Platform.
+
+Purpose:
+Transform tagged defensive possessions into searchable, analyzable data that
+measure coverage effectiveness, communication, and breakdowns.
+
+Environment:
+Local React (frontend) + Flask (backend) + SQLite (database)
+Launch command: ./start_defense_app.command
+
+Coding guidelines:
+- Maintain schema consistency between Tagger and Dashboard
+- Favor reusable TypeScript interfaces and Flask API endpoints
+- Align analytics fields with Stop Rate, Breakdown %, EPV Diff
+- Use Pandas/Numpy for analysis, FFmpeg for video ops,
+  and OpenAI embeddings for semantic search
+
+You may safely suggest:
+- Schema optimizations or SQLite → Postgres migration
+- React UI improvements for Tagger/Dashboard
+- Flask routes for analytics and clip search
+- Python scripts for statistical modeling or visualization
+
+--------------------------------------------------
+END OF FILE

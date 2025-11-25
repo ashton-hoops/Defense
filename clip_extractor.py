@@ -69,38 +69,61 @@ def set_video():
     """Set the current video file path"""
     if request.method == "OPTIONS":
         return jsonify({"ok": True})
-    
+
     try:
         data = request.get_json(force=True)
         global current_video_path
-        video_path = data.get("video_path")
-        
-        # If path doesn't exist, try to find it in common local directories
-        if not video_path or not os.path.exists(video_path):
-            # Try looking in Downloads or Desktop folders
+        video_path = data.get("video_path", "").strip()
+
+        print(f"🔍 Looking for video: {video_path}")
+
+        # If path exists as-is, use it
+        if video_path and os.path.exists(video_path):
+            current_video_path = video_path
+            print(f"📹 Video set (direct): {current_video_path}")
+            return jsonify({"ok": True, "video_path": current_video_path})
+
+        # Otherwise try to find it by filename
+        filename = video_path
+        if not filename:
             filename = data.get("filename", "")
-            if filename:
-                possible_paths = [
-                    CLIPS_DIR / filename,
-                    Path.home() / "Downloads" / filename,
-                    Path.home() / "Desktop" / filename,
-                ]
-                for p in possible_paths:
-                    if p.exists():
-                        video_path = str(p)
-                        break
-        
-        if not video_path or not os.path.exists(video_path):
-            return jsonify({
-                "ok": False, 
-                "error": "Video file not found. Please set video path manually.",
-                "hint": "Click the video filename in the tagger to set the path"
-            }), 400
-        
-        current_video_path = video_path
-        print(f"📹 Video set: {current_video_path}")
-        return jsonify({"ok": True, "video_path": current_video_path})
+
+        # Remove any path prefix if it's there (get just the filename)
+        if "/" in filename:
+            filename = filename.split("/")[-1]
+        elif "\\" in filename:
+            filename = filename.split("\\")[-1]
+
+        if filename:
+            print(f"🔍 Searching for filename: {filename}")
+            # Try looking in Clips folder first (where game videos are), then other locations
+            possible_paths = [
+                CLIPS_DIR / filename,
+                BASE_DIR / filename,
+                BASE_DIR / "Videos" / filename,
+                Path.home() / "Downloads" / filename,
+                Path.home() / "Desktop" / filename,
+                Path.home() / "Desktop" / "Defense" / filename,
+                Path.home() / "Desktop" / "Defense" / "Videos" / filename,
+            ]
+
+            for p in possible_paths:
+                print(f"  Checking: {p}")
+                if p.exists():
+                    current_video_path = str(p)
+                    print(f"📹 Video found: {current_video_path}")
+                    return jsonify({"ok": True, "video_path": current_video_path})
+
+        print(f"❌ Video not found: {video_path}")
+        return jsonify({
+            "ok": False,
+            "error": f"Video file not found: {video_path}",
+            "searched": str(CLIPS_DIR),
+            "hint": "Make sure the video file is in the Clips folder"
+        }), 400
+
     except Exception as e:
+        print(f"❌ Error setting video: {str(e)}")
         return jsonify({"ok": False, "error": str(e)}), 500
 
 @app.route("/set_video_manual", methods=["POST", "OPTIONS"])
@@ -202,7 +225,7 @@ def extract_clip():
             "formation": data.get("Offensive Formation", ""),
             "playName": data.get("Play Name", ""),
             "scoutCoverage": data.get("Covered in Scout?", ""),
-            "actionTrigger": data.get("Action Trigger", ""),
+            "playTrigger": data.get("Play Trigger") or data.get("Action Trigger", ""),
             "actionTypes": data.get("Action Type(s)", ""),
             "actionSequence": data.get("Action Sequence", ""),
             "coverage": data.get("Defensive Coverage", ""),
@@ -250,13 +273,15 @@ def extract_clip():
             "canonical_clip_id": canonical_clip_id,
             "opponent": opponent_norm,
             "opponent_slug": opponent_slug,
+            "location": data.get("Location", ""),
+            "game_score": data.get("Game Score", ""),
             "quarter": int(quarter),
             "possession": int(possession),
             "situation": data.get("Situation", ""),
             "formation": data.get("Offensive Formation", ""),
             "play_name": data.get("Play Name", ""),
             "scout_coverage": data.get("Covered in Scout?", ""),
-            "action_trigger": data.get("Action Trigger", ""),
+            "play_trigger": data.get("Play Trigger") or data.get("Action Trigger", ""),
             "action_types": data.get("Action Type(s)", ""),
             "action_sequence": data.get("Action Sequence", ""),
             "coverage": data.get("Defensive Coverage", ""),
@@ -276,6 +301,7 @@ def extract_clip():
             "shot_x": data.get("Shot X", ""),
             "shot_y": data.get("Shot Y", ""),
             "shot_result": data.get("Shot Result", ""),
+            "player_designation": data.get("player_designation", ""),
             "notes": data.get("Notes", ""),
             "start_time": start_time,
             "end_time": end_time,

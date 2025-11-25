@@ -1204,7 +1204,7 @@ body {
                 <th>Formation</th>
                 <th>Play Name</th>
                 <th>Scout Coverage</th>
-                <th>Action Trigger</th>
+                <th>Play Trigger</th>
                 <th>Action Types</th>
                 <th>Action Sequence</th>
                 <th>Coverage</th>
@@ -1688,9 +1688,9 @@ body {
             <datalist id="search-playname-options"></datalist>
           </div>
           <div class="filter-search-field">
-            <label for="search-actiontrigger">Action Trigger</label>
-            <input type="search" id="search-actiontrigger" data-filter-search="actionTrigger" placeholder="e.g. Entry, DHO" list="search-actiontrigger-options" autocomplete="off">
-            <datalist id="search-actiontrigger-options"></datalist>
+            <label for="search-playtrigger">Play Trigger</label>
+            <input type="search" id="search-playtrigger" data-filter-search="playTrigger" placeholder="e.g. Entry, DHO" list="search-playtrigger-options" autocomplete="off">
+            <datalist id="search-playtrigger-options"></datalist>
           </div>
           <div class="filter-search-field">
             <label for="search-actiontypes">Action Type(s)</label>
@@ -1745,7 +1745,7 @@ body {
     const TEXT_SEARCH_FIELDS = [
       { key: 'formation', label: 'Formation', accessor: clip => cleanString(clip.formation), datalistId: 'search-formation-options' },
       { key: 'playName', label: 'Play Name', accessor: clip => cleanString(clip.playName), datalistId: 'search-playname-options' },
-      { key: 'actionTrigger', label: 'Action Trigger', accessor: clip => cleanString(clip.actionTrigger), datalistId: 'search-actiontrigger-options' },
+      { key: 'playTrigger', label: 'Play Trigger', accessor: clip => cleanString(clip.playTrigger), datalistId: 'search-playtrigger-options' },
       { key: 'actionTypes', label: 'Action Type(s)', accessor: clip => cleanString(clip.actionTypes), datalistId: 'search-actiontypes-options' },
       { key: 'actionSequence', label: 'Action Sequence', accessor: clip => cleanString(clip.actionSequence), datalistId: 'search-actionsequence-options' },
       { key: 'breakdownDetail', label: 'Breakdown Detail', accessor: clip => cleanString(clip.breakdownDetail || clip.breakdown), datalistId: 'search-breakdown-options' }
@@ -1881,7 +1881,7 @@ body {
         formation: cleanString(clip.offensive_formation, '—'),
         playName: cleanString(clip.play_name, 'Defensive Possession'),
         scoutCoverage: cleanString(clip.scout_coverage, 'No – Not Practiced'),
-        actionTrigger: cleanString(clip.action_trigger, '—'),
+        playTrigger: cleanString(clip.play_trigger, '—'),
         actionTypes: cleanString(clip.action_types, '—'),
         actionSequence: cleanString(clip.action_sequence, '—'),
         coverage,
@@ -2685,7 +2685,7 @@ function refreshSearchOptions() {
           <td>${formatCell(clip.formation)}</td>
           <td>${formatCell(clip.playName)}</td>
           <td>${formatCell(clip.scoutCoverage)}</td>
-          <td>${formatCell(clip.actionTrigger)}</td>
+          <td>${formatCell(clip.playTrigger)}</td>
           <td>${formatCell(clip.actionTypes)}</td>
           <td>${formatCell(clip.actionSequence)}</td>
           <td>${formatCell(clip.coverage)}</td>

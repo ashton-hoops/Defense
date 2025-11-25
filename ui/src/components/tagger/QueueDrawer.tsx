@@ -9,11 +9,9 @@ type QueueDrawerProps = {
   onSelectAll: (checked: boolean) => void
   onSelectClip: (index: number, checked: boolean) => void
   onDeleteClip: (index: number) => void
-  onSeekToClip: (timeStr: string) => void
+  onEditClip: (clip: QueueEntry) => void
   onExportCsv: () => void
   onAddToDashboard: () => void
-  excelActive: boolean
-  onToggleExcel: () => void
 }
 
 export const QueueDrawer = ({
@@ -25,18 +23,16 @@ export const QueueDrawer = ({
   onSelectAll,
   onSelectClip,
   onDeleteClip,
-  onSeekToClip,
+  onEditClip,
   onExportCsv,
   onAddToDashboard,
-  excelActive,
-  onToggleExcel,
 }: QueueDrawerProps) => {
   const allSelected = clips.length > 0 && selectedCount === clips.length
   const someSelected = selectedCount > 0 && selectedCount < clips.length
 
   const handleRowClick = (e: React.MouseEvent, clip: QueueEntry) => {
     if ((e.target as HTMLElement).closest('button, input[type="checkbox"]')) return
-    onSeekToClip(clip.start)
+    onEditClip(clip)
   }
 
   const parseTime = (timeStr: string): number => {
@@ -72,15 +68,6 @@ export const QueueDrawer = ({
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={onToggleExcel}
-              className={`cursor-pointer rounded-md px-3 py-1 text-xs transition-all duration-200 hover:opacity-[0.99] ${
-                excelActive ? 'bg-[#252525] text-[#faf9f6]' : 'bg-[#2a2a2a] text-[#841617]'
-              }`}
-              type="button"
-            >
-              {excelActive ? 'Active' : 'Inactive'}
-            </button>
             <button
               onClick={onExportCsv}
               className="rounded bg-neutral-800 px-3 py-1.5 text-xs hover:bg-neutral-700"

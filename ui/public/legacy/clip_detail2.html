@@ -381,7 +381,7 @@ body {
                 <td>Horns Flare</td>
               </tr>
               <tr>
-                <td>Action Trigger</td>
+                <td>Play Trigger</td>
                 <td>Entry to wing</td>
               </tr>
               <tr>
@@ -563,7 +563,7 @@ if (clipId) {
         situation: clip.situation,
         formation: clip.offensive_formation,
         playName: clip.play_name,
-        actionTrigger: clip.action_trigger,
+        playTrigger: clip.play_trigger,
         actionTypes: clip.action_types,
         actionSequence: clip.action_sequence,
         scoutCoverage: clip.scout_coverage,
@@ -602,7 +602,7 @@ function updateAccordionTables(clip) {
   // Play & Actions
   const playRows = document.querySelectorAll('.accordion-section:nth-of-type(2) .excel-table tbody tr');
   playRows[0].children[1].textContent = clip.playName ?? '—';
-  playRows[1].children[1].textContent = clip.actionTrigger ?? '—';
+  playRows[1].children[1].textContent = clip.playTrigger ?? '—';
   playRows[2].children[1].textContent = clip.actionTypes ?? '—';
   playRows[3].children[1].textContent = clip.actionSequence ?? '—';
   playRows[4].children[1].textContent = clip.scoutCoverage ?? '—';

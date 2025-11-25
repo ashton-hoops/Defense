@@ -816,8 +816,8 @@ textarea.pbp, .mono, .timecode {
         </div>
 
         <div class="tag-field">
-          <span class="tag-label">Action Trigger</span>
-          <input class="tag-input" id="actionTrigger" placeholder="Entry to wing">
+          <span class="tag-label">Play Trigger</span>
+          <input class="tag-input" id="playTrigger" placeholder="Entry to wing">
         </div>
 
         <div class="tag-field">
@@ -1181,7 +1181,7 @@ function buildServerPayload(clipData) {
     formation: clipData['Offensive Formation'],
     playName: clipData['Play Name'],
     scoutCoverage: clipData['Covered in Scout?'],
-    actionTrigger: clipData['Action Trigger'],
+    playTrigger: clipData['Play Trigger'],
     actionTypes: clipData['Action Type(s)'],
     actionSequence: clipData['Action Sequence'],
     coverage: clipData['Defensive Coverage'],
@@ -1471,7 +1471,7 @@ document.getElementById('save').addEventListener('click', async ()=>{
     'Offensive Formation': document.getElementById('offFormation').value,
     'Play Name': document.getElementById('playName').value,
     'Covered in Scout?': document.getElementById('scoutTag').value,
-    'Action Trigger': document.getElementById('actionTrigger').value,
+    'Play Trigger': document.getElementById('playTrigger').value,
     'Action Type(s)': document.getElementById('actionTypes').value,
     'Action Sequence': document.getElementById('actionSeq').value,
     'Defensive Coverage': document.getElementById('coverage').value,
@@ -1642,7 +1642,7 @@ function toNormalizedPayload(clip) {
     offensive_formation: clip['Offensive Formation'] || '',
     play_name: clip['Play Name'] || '',
     scout_coverage: clip['Covered in Scout?'] || '',
-    action_trigger: clip['Action Trigger'] || '',
+    play_trigger: clip['Play Trigger'] || '',
     action_types: clip['Action Type(s)'] || '',
     action_sequence: clip['Action Sequence'] || '',
     defensive_coverage: clip['Defensive Coverage'] || '',
@@ -1705,7 +1705,7 @@ async function sendClipToExtractor(clipData) {
     offensive_formation: clipData['Offensive Formation'] ?? '',
     play_name: clipData['Play Name'] ?? '',
     scout_coverage: clipData['Covered in Scout?'] ?? '',
-    action_trigger: clipData['Action Trigger'] ?? '',
+    play_trigger: clipData['Play Trigger'] ?? '',
     action_types: clipData['Action Type(s)'] ?? '',
     action_sequence: clipData['Action Sequence'] ?? '',
     defensive_coverage: clipData['Defensive Coverage'] ?? '',
@@ -2355,7 +2355,7 @@ function exportClipsCSV(){
       'Offensive Formation',
       'Play Name',
       'Covered in Scout?',
-      'Action Trigger',
+      'Play Trigger',
       'Action Type(s)',
       'Action Sequence',
       'Defensive Coverage',
@@ -2395,7 +2395,7 @@ function exportClipsCSV(){
       'id','game','opponent','quarter','possession',
       'location','location_display','location_code',
       'situation','offensive_formation','play_name',
-      'scout_coverage','action_trigger','action_types','action_sequence',
+      'scout_coverage','play_trigger','action_types','action_sequence',
       'defensive_coverage','ball_screen_coverage','off_ball_screen_coverage','help_rotation',
       'defensive_disruption','defensive_breakdown','result','paint_touches',
       'shooter_designation','shot_location','shot_contest','rebound_outcome',

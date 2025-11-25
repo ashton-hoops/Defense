@@ -1,5 +1,5 @@
 import { getConfig } from '../config'
-import type { Clip } from '../types'
+import type { Clip, TagAction } from '../types'
 
 const toStringOrUndefined = (value: unknown): string | undefined => {
   if (value === undefined || value === null) return undefined
@@ -20,6 +20,32 @@ const coerceBoolean = (value: unknown): boolean | undefined => {
   if (['yes', 'y', 'true', '1'].includes(normalized)) return true
   if (['no', 'n', 'false', '0'].includes(normalized)) return false
   return undefined
+}
+
+const parseClockTime = (value: unknown): number | undefined => {
+  if (value === undefined || value === null || value === '') return undefined
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined
+  }
+  const str = String(value).trim()
+  if (!str) return undefined
+  const segments = str.split(':')
+  if (segments.length >= 2 && segments.length <= 3) {
+    const numeric = segments.map((segment) => Number(segment))
+    if (numeric.some((part) => Number.isNaN(part))) {
+      return undefined
+    }
+    if (numeric.length === 3) {
+      const [h, m, s] = numeric
+      return h * 3600 + m * 60 + s
+    }
+    if (numeric.length === 2) {
+      const [m, s] = numeric
+      return m * 60 + s
+    }
+  }
+  const fallback = Number(str)
+  return Number.isFinite(fallback) ? fallback : undefined
 }
 
 const firstNonEmpty = (...values: Array<unknown>): string | undefined => {
@@ -167,6 +193,7 @@ export const normalizeClip = (raw: any): Clip => {
     id: safeId(raw?.id ?? raw?.clip_id ?? raw?.canonical_clip_id),
     gameId: gameNum ?? '',
     filename: toStringOrUndefined(raw?.filename),
+    sourceVideo: toStringOrUndefined(raw?.source_video ?? raw?.sourceVideo),
     gameDate: toStringOrUndefined(raw?.game_date),
     gameNumber: gameNum,
     opponent: toStringOrUndefined(raw?.opponent),
@@ -177,7 +204,9 @@ export const normalizeClip = (raw: any): Clip => {
     formation: toStringOrUndefined(raw?.formation ?? raw?.offensive_formation),
     playName: toStringOrUndefined(raw?.play_name ?? raw?.playName),
     scoutCoverage: toStringOrUndefined(raw?.scout_coverage ?? raw?.scoutCoverage),
-    actionTrigger: toStringOrUndefined(raw?.action_trigger ?? raw?.actionTrigger),
+    playTrigger: toStringOrUndefined(
+      raw?.play_trigger ?? raw?.playTrigger ?? raw?.action_trigger ?? raw?.actionTrigger,
+    ),
     actionTypes: toStringOrUndefined(raw?.action_types ?? raw?.actionTypes),
     actionSequence: toStringOrUndefined(raw?.action_sequence ?? raw?.actionSequence),
     coverage: toStringOrUndefined(raw?.coverage ?? raw?.defensive_coverage),
@@ -193,8 +222,8 @@ export const normalizeClip = (raw: any): Clip => {
     tags: Array.isArray(raw?.tags) ? raw.tags : undefined,
     notes: toStringOrUndefined(raw?.notes),
     videoUrl: toAbsoluteMediaUrl(firstNonEmpty(raw?.video_url, raw?.videoUrl, raw?.video_path, raw?.path)),
-    videoStart: toNumberOrUndefined(raw?.start_time ?? raw?.startTime),
-    videoEnd: toNumberOrUndefined(raw?.end_time ?? raw?.endTime),
+    videoStart: parseClockTime(raw?.start_time ?? raw?.startTime),
+    videoEnd: parseClockTime(raw?.end_time ?? raw?.endTime),
     hasShot: coerceBoolean(raw?.has_shot ?? raw?.hasShot),
     shotX: toNumberOrUndefined(raw?.shot_x ?? raw?.shotX),
     shotY: toNumberOrUndefined(raw?.shot_y ?? raw?.shotY),
@@ -212,6 +241,7 @@ export const normalizeClip = (raw: any): Clip => {
     savedAt,
     createdAt,
     updatedAt,
+    actions: parseClipActions(raw?.actions ?? raw?.actions_json),
   }
 
   if (!clip.gameId) {
@@ -227,6 +257,7 @@ export type ClipSummary = {
   game: string
   gameDateRaw: string | null
   gameDateDisplay: string
+  gameScore: string
   locationLabel: string
   locationRaw: string
   playResult: string
@@ -267,6 +298,26 @@ const notesPreview = (notes?: string): string => {
   return `${trimmed.slice(0, 117)}…`
 }
 
+const parseClipActions = (raw: unknown): TagAction[] => {
+  if (typeof raw === 'string') {
+    try {
+      return parseClipActions(JSON.parse(raw))
+    } catch {
+      return []
+    }
+  }
+  if (!Array.isArray(raw)) return []
+  return raw.map((entry) => ({
+    phase: typeof entry?.phase === 'string' ? entry.phase : '',
+    type: typeof entry?.type === 'string' ? entry.type : '',
+    coverage: typeof entry?.coverage === 'string' ? entry.coverage : '',
+    help: typeof entry?.help === 'string' ? entry.help : '',
+    breakdown: typeof entry?.breakdown === 'string' ? entry.breakdown : '',
+    communication: typeof entry?.communication === 'string' ? entry.communication : '',
+    outcome: typeof entry?.outcome === 'string' ? entry.outcome : '',
+  }))
+}
+
 export const toClipSummary = (clip: Clip): ClipSummary => {
   const saved = formatDate(clip.savedAt ?? clip.createdAt ?? clip.updatedAt)
   const gameDateInfo = formatDateOnly(clip.gameDate)
@@ -278,6 +329,7 @@ export const toClipSummary = (clip: Clip): ClipSummary => {
     game: clip.gameId || '—',
     gameDateRaw: gameDateInfo.raw,
     gameDateDisplay: gameDateInfo.formatted,
+    gameScore: clip.gameScore ?? '—',
     locationLabel: resolveLocationLabel(clip),
     locationRaw,
     playResult: clip.playResult ?? '—',
@@ -326,6 +378,7 @@ export const findCachedClip = (clipId: string | null | undefined): Clip | null =
 const serializeClip = (clip: Clip): Record<string, unknown> => ({
   ...clip,
   hasShot: clip.hasShot ?? undefined,
+  actions: clip.actions ?? undefined,
 })
 
 export const syncClipToCache = (clip: Clip): void => {

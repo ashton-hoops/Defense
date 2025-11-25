@@ -11,6 +11,19 @@ const DATALIST_OPTIONS = {
   gameLocation: ['Home', 'Away', 'Neutral'],
   situation: ['Half Court', 'SLOB', 'BLOB', 'Transition', 'Early Offense', 'Half Court (ATO)'],
   scoutTag: ['Yes – Practiced', 'Partial – Similar Action', 'No – Not Practiced'],
+  offFormation: [
+    '5-Out',
+    '4-Out 1-In',
+    '3-Out 2-In',
+    '2-1-2',
+    '1-4 High',
+    '1-4 Low',
+    'Horns',
+    'Box (BLOB/SLOB)',
+    'Diamond (BLOB/SLOB)',
+    '4 Low (BLOB/SLOB)',
+    '4 High (BLOB/SLOB)',
+  ],
   coverage: [
     'Man',
     '2-3',
@@ -20,28 +33,6 @@ const DATALIST_OPTIONS = {
     'Full Court Man',
     '2-2-1 Press',
     '1-2-1-1 Press (Diamond)',
-  ],
-  ballScreenCov: [
-    'Under ',
-    'Over ',
-    'ICE ',
-    'Weak (Force Weak Hand)',
-    'Switch',
-    'Hard Hedge',
-    'Soft Hedge/Show',
-    'Peel Switch',
-    'Blitz (Trap)',
-  ],
-  offBallScreenCov: ['Attach/Stay', 'Over', 'Under', 'Top-Lock', 'Switch', 'Show'],
-  helpRotation: [
-    'No Help / No Rotation',
-    'Low-Man Help',
-    'X-Out Rotation',
-    'Sink / Fill',
-    'Full Rotation',
-    'Late Help',
-    'No Rotation (Missed)',
-    'Peel Help',
   ],
   defDisruption: [
     'Denied Wing Entry',
@@ -88,6 +79,7 @@ const DATALIST_OPTIONS = {
     'Blocked',
   ],
   reboundOutcome: ['DREB', 'OREB', 'Other'],
+  shooterDesignation: ['Blue (Perimeter)', 'Blue (Post)', 'Green', 'Black'],
 }
 
 export const TagsPane = ({ fields, onChange }: TagsPaneProps) => {
@@ -143,8 +135,12 @@ export const TagsPane = ({ fields, onChange }: TagsPaneProps) => {
   }
 
   return (
-    <div className="overflow-x-auto overflow-y-hidden" style={{ height: '100%' }}>
-      <div className="flex w-max flex-nowrap items-center gap-[10px] rounded-xl border border-[#2a2a2a] bg-[#191919]" style={{ padding: '6px 10px', height: '100%' }}>
+    <div style={{ height: '100%' }}>
+      <div className="flex h-full flex-col rounded-xl border border-[#2a2a2a] bg-[#1a1a1a] p-3 shadow-[0_6px_18px_rgba(0,0,0,0.35)]">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-white/60">Possession</p>
+        <div className="mt-2">
+          <div className="overflow-x-auto overflow-y-hidden pb-1">
+            <div className="flex min-w-full w-max flex-nowrap items-center gap-[10px]">
         {/* Possession # */}
         <div className="tag-field flex min-w-[140px] flex-shrink-0 flex-col gap-0">
           <span className="tag-label text-[10px] text-[#e8e2d6] mb-0.5">Possession #</span>
@@ -178,6 +174,7 @@ export const TagsPane = ({ fields, onChange }: TagsPaneProps) => {
             ref={(el) => (inputRefs.current.offFormation = el)}
             value={fields.offFormation}
             onChange={(e) => onChange('offFormation', e.target.value)}
+            {...getInputProps('offFormation')}
             placeholder="Horns / 5-Out / 1-4 High"
             className="tag-input w-fit min-w-[190px] max-w-[560px] rounded-lg border border-[#363636] bg-[#252525] px-2 py-1 text-sm text-[#faf9f6] focus:border-[#841617] focus:shadow-[0_0_0_2px_rgba(132,22,23,0.24)] focus:outline-none"
           />
@@ -208,92 +205,27 @@ export const TagsPane = ({ fields, onChange }: TagsPaneProps) => {
           />
         </div>
 
-        {/* Action Trigger */}
+        {/* Play Trigger */}
         <div className="tag-field flex flex-shrink-0 flex-col gap-0">
-          <span className="tag-label text-[10px] text-[#e8e2d6] mb-0.5">Action Trigger</span>
+          <span className="tag-label text-[10px] text-[#e8e2d6] mb-0.5">Play Trigger</span>
           <input
-            ref={(el) => (inputRefs.current.actionTrigger = el)}
-            value={fields.actionTrigger}
-            onChange={(e) => onChange('actionTrigger', e.target.value)}
+            ref={(el) => (inputRefs.current.playTrigger = el)}
+            value={fields.playTrigger}
+            onChange={(e) => onChange('playTrigger', e.target.value)}
             placeholder="Entry to wing"
-            className="tag-input w-fit min-w-[190px] max-w-[560px] rounded-lg border border-[#363636] bg-[#252525] px-2 py-1 text-sm text-[#faf9f6] focus:border-[#841617] focus:shadow-[0_0_0_2px_rgba(132,22,23,0.24)] focus:outline-none"
-          />
-        </div>
-
-        {/* Action Type(s) */}
-        <div className="tag-field flex flex-shrink-0 flex-col gap-0">
-          <span className="tag-label text-[10px] text-[#e8e2d6] mb-0.5">Action Type(s)</span>
-          <input
-            ref={(el) => (inputRefs.current.actionTypes = el)}
-            value={fields.actionTypes}
-            onChange={(e) => onChange('actionTypes', e.target.value)}
-            placeholder="comma-separated"
-            className="tag-input w-fit min-w-[190px] max-w-[560px] rounded-lg border border-[#363636] bg-[#252525] px-2 py-1 text-sm text-[#faf9f6] focus:border-[#841617] focus:shadow-[0_0_0_2px_rgba(132,22,23,0.24)] focus:outline-none"
-          />
-        </div>
-
-        {/* Action Sequence */}
-        <div className="tag-field flex flex-shrink-0 flex-col gap-0">
-          <span className="tag-label text-[10px] text-[#e8e2d6] mb-0.5">Action Sequence</span>
-          <input
-            ref={(el) => (inputRefs.current.actionSeq = el)}
-            value={fields.actionSeq}
-            onChange={(e) => onChange('actionSeq', e.target.value)}
-            placeholder="Horns → Stagger → DHO"
             className="tag-input w-fit min-w-[190px] max-w-[560px] rounded-lg border border-[#363636] bg-[#252525] px-2 py-1 text-sm text-[#faf9f6] focus:border-[#841617] focus:shadow-[0_0_0_2px_rgba(132,22,23,0.24)] focus:outline-none"
           />
         </div>
 
         {/* Defensive Coverage */}
         <div className="tag-field flex flex-shrink-0 flex-col gap-0">
-          <span className="tag-label text-[10px] text-[#e8e2d6] mb-0.5">
-            Defensive Coverage {fields.coverage && `(value: "${fields.coverage}")`}
-          </span>
+          <span className="tag-label text-[10px] text-[#e8e2d6] mb-0.5">Defensive Coverage</span>
           <input
             ref={(el) => (inputRefs.current.coverage = el)}
             value={fields.coverage}
             onChange={(e) => onChange('coverage', e.target.value)}
             {...getInputProps('coverage')}
             placeholder="Man / 2-3 / 3-2 / 1-3-1 / 1-2-2 / Press"
-            className="tag-input w-fit min-w-[190px] max-w-[560px] rounded-lg border border-[#363636] bg-[#252525] px-2 py-1 text-sm text-[#faf9f6] focus:border-[#841617] focus:shadow-[0_0_0_2px_rgba(132,22,23,0.24)] focus:outline-none"
-          />
-        </div>
-
-        {/* Ball Screen Coverage */}
-        <div className="tag-field flex flex-shrink-0 flex-col gap-0">
-          <span className="tag-label text-[10px] text-[#e8e2d6] mb-0.5">Ball Screen Coverage</span>
-          <input
-            ref={(el) => (inputRefs.current.ballScreenCov = el)}
-            value={fields.ballScreenCov}
-            onChange={(e) => onChange('ballScreenCov', e.target.value)}
-            {...getInputProps('ballScreenCov')}
-            placeholder="*(Drop/Stuck/Late) if nec."
-            className="tag-input w-fit min-w-[190px] max-w-[560px] rounded-lg border border-[#363636] bg-[#252525] px-2 py-1 text-sm text-[#faf9f6] focus:border-[#841617] focus:shadow-[0_0_0_2px_rgba(132,22,23,0.24)] focus:outline-none"
-          />
-        </div>
-
-        {/* Off-Ball Screen Coverage */}
-        <div className="tag-field flex flex-shrink-0 flex-col gap-0">
-          <span className="tag-label text-[10px] text-[#e8e2d6] mb-0.5">Off-Ball Screen Coverage</span>
-          <input
-            ref={(el) => (inputRefs.current.offBallScreenCov = el)}
-            value={fields.offBallScreenCov}
-            onChange={(e) => onChange('offBallScreenCov', e.target.value)}
-            {...getInputProps('offBallScreenCov')}
-            placeholder="*(Drop/Stuck/Late) if nec."
-            className="tag-input w-fit min-w-[190px] max-w-[560px] rounded-lg border border-[#363636] bg-[#252525] px-2 py-1 text-sm text-[#faf9f6] focus:border-[#841617] focus:shadow-[0_0_0_2px_rgba(132,22,23,0.24)] focus:outline-none"
-          />
-        </div>
-
-        {/* Help/Rotation */}
-        <div className="tag-field flex flex-shrink-0 flex-col gap-0">
-          <span className="tag-label text-[10px] text-[#e8e2d6] mb-0.5">Help/Rotation</span>
-          <input
-            ref={(el) => (inputRefs.current.helpRotation = el)}
-            value={fields.helpRotation}
-            onChange={(e) => onChange('helpRotation', e.target.value)}
-            {...getInputProps('helpRotation')}
-            placeholder="Low-Man Help / X-Out Rotation"
             className="tag-input w-fit min-w-[190px] max-w-[560px] rounded-lg border border-[#363636] bg-[#252525] px-2 py-1 text-sm text-[#faf9f6] focus:border-[#841617] focus:shadow-[0_0_0_2px_rgba(132,22,23,0.24)] focus:outline-none"
           />
         </div>
@@ -356,6 +288,7 @@ export const TagsPane = ({ fields, onChange }: TagsPaneProps) => {
             ref={(el) => (inputRefs.current.shooterDesignation = el)}
             value={fields.shooterDesignation}
             onChange={(e) => onChange('shooterDesignation', e.target.value)}
+            {...getInputProps('shooterDesignation')}
             placeholder="Blue / Green / Black"
             className="tag-input w-fit min-w-[190px] max-w-[560px] rounded-lg border border-[#363636] bg-[#252525] px-2 py-1 text-sm text-[#faf9f6] focus:border-[#841617] focus:shadow-[0_0_0_2px_rgba(132,22,23,0.24)] focus:outline-none"
           />
@@ -424,6 +357,9 @@ export const TagsPane = ({ fields, onChange }: TagsPaneProps) => {
             placeholder="Any quick notes"
             className="tag-input w-fit min-w-[190px] max-w-[560px] rounded-lg border border-[#363636] bg-[#252525] px-2 py-1 text-sm text-[#faf9f6] focus:border-[#841617] focus:shadow-[0_0_0_2px_rgba(132,22,23,0.24)] focus:outline-none"
           />
+        </div>
+            </div>
+          </div>
         </div>
       </div>
 

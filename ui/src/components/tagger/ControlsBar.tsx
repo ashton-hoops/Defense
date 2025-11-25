@@ -4,28 +4,24 @@ type ControlsBarProps = {
   videoRef: HTMLVideoElement | null
   inTime: string
   outTime: string
-  excelRow: number
   onLoadVideo: () => void
   onMarkIn: () => void
   onMarkOut: () => void
   onSave: () => void
   onInTimeChange: (value: string) => void
   onOutTimeChange: (value: string) => void
-  onExcelRowChange: (value: number) => void
 }
 
 export const ControlsBar = ({
   videoRef,
   inTime,
   outTime,
-  excelRow,
   onLoadVideo,
   onMarkIn,
   onMarkOut,
   onSave,
   onInTimeChange,
   onOutTimeChange,
-  onExcelRowChange,
 }: ControlsBarProps) => {
   const inInputRef = useRef<HTMLInputElement>(null)
   const outInputRef = useRef<HTMLInputElement>(null)
@@ -48,7 +44,7 @@ export const ControlsBar = ({
   }
 
   return (
-    <div className="flex flex-shrink-0 flex-nowrap items-center justify-center gap-[0.25rem] rounded-[10px] border border-[#2a2a2a] bg-[#191919] px-[0.3rem] py-[0.22rem]">
+    <div className="flex flex-shrink-0 flex-nowrap items-center justify-center gap-[0.25rem] rounded-b-[10px] rounded-t-none border border-[#2a2a2a] border-t-0 bg-[#191919] px-[0.3rem] py-[0.22rem]">
       {/* Load Video */}
       <button
         onClick={onLoadVideo}
@@ -132,19 +128,6 @@ export const ControlsBar = ({
       >
         Mark OUT
       </button>
-
-      {/* Excel Row */}
-      <div className="inline-group ml-3 inline-flex flex-shrink-0 items-center gap-[6px] whitespace-nowrap">
-        <span className="select-none text-xs text-slate-400">Excel Row</span>
-        <input
-          type="number"
-          min="2"
-          value={excelRow}
-          onChange={(e) => onExcelRowChange(parseInt(e.target.value) || 2)}
-          title="Excel row to save into"
-          className="h-[26px] w-20 flex-shrink-0 rounded border border-[#2a2a2a] bg-[#161616] px-2 text-center text-[0.78rem] text-[#f0f0ec] focus:border-[#841617] focus:shadow-none focus:outline-none"
-        />
-      </div>
 
       {/* Save */}
       <button

@@ -35,6 +35,7 @@ export type DataProvider = {
       shooterDesignation?: string | null
     },
   ): Promise<Clip>
+  deleteGame(gameId: string): Promise<void>
   deleteClip(id: string): Promise<void>
   triggerExtraction(payload: { clipId: string }): Promise<ExtractionJob>
 }

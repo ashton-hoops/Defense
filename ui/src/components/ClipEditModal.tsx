@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import type { Clip } from '../lib/types'
+import type { Clip, TagAction } from '../lib/types'
 import { FloatingPicker } from './tagger/FloatingPicker'
 import './ClipEditModal.css'
 
@@ -14,6 +14,19 @@ type ClipEditModalProps = {
 const FIELD_OPTIONS: Record<string, string[]> = {
   situation: ['Half Court', 'Transition', 'SLOB', 'BLOB', 'Early Offense', 'Half Court (ATO)'],
   scoutCoverage: ['Yes – Practiced', 'Partial – Similar Action', 'No – Not Practiced'],
+  formation: [
+    '5-Out',
+    '4-Out 1-In',
+    '3-Out 2-In',
+    '2-1-2',
+    '1-4 High',
+    '1-4 Low',
+    'Horns',
+    'Box (BLOB/SLOB)',
+    'Diamond (BLOB/SLOB)',
+    '4 Low (BLOB/SLOB)',
+    '4 High (BLOB/SLOB)',
+  ],
   coverage: [
     'Man',
     '2-3',
@@ -24,35 +37,26 @@ const FIELD_OPTIONS: Record<string, string[]> = {
     '2-2-1 Press',
     '1-2-1-1 Press (Diamond)',
   ],
-  ballScreen: [
-    'Under',
-    'Over',
-    'ICE',
-    'Weak (Force Weak Hand)',
-    'Switch',
-    'Hard Hedge',
-    'Soft Hedge/Show',
-    'Peel Switch',
-    'Blitz (Trap)',
-  ],
-  offBallScreen: ['Attach/Stay', 'Over', 'Under', 'Top-Lock', 'Switch', 'Show'],
-  helpRotation: [
-    'No Help / No Rotation',
-    'Low-Man Help',
-    'X-Out Rotation',
-    'Sink / Fill',
-    'Full Rotation',
-    'Late Help',
-    'No Rotation (Missed)',
-    'Peel Help',
-  ],
   disruption: [
     'Denied Wing Entry',
     'Denied Post Entry',
     'Pressured Ball Handler to Prevent Pass',
     'Deflected Pass',
   ],
-  breakdown: ['Yes', 'No'],
+  breakdown: [
+    'None',
+    'Stuck on Screen',
+    'Late Chase / Slow Recovery',
+    'Late Help',
+    'No Help / Missed Rotation',
+    'Missed Tag',
+    'Poor Closeout',
+    'Over Helped',
+    'Beat Off Dribble',
+    'Ball Watching / Backcut',
+    'Wrong Coverage / Miscommunication',
+    'Transition Mismatch / Not Matched',
+  ],
   playResult: [
     'Made FG',
     'Missed FG',
@@ -66,7 +70,7 @@ const FIELD_OPTIONS: Record<string, string[]> = {
     'Loose-Ball Foul',
     'Deflection (Out of Bounds)',
   ],
-  shooterDesignation: ['Blue', 'Green', 'Black'],
+  shooterDesignation: ['Blue (Perimeter)', 'Blue (Post)', 'Green', 'Black'],
   paintTouches: [
     'No Paint Touch',
     'Drive Baseline',
@@ -95,6 +99,106 @@ const FIELD_OPTIONS: Record<string, string[]> = {
   rebound: ['DREB', 'OREB', 'Other'],
 }
 
+// Action constants from ActionBar
+const PHASE_OPTIONS = ['On-Ball', 'Off-Ball', 'DHO', 'CUT']
+const ON_BALL_ACTIONS = [
+  { label: 'ISO' },
+  {
+    label: 'Pick & Roll',
+    secondary: ['Middle', 'Side'],
+    tertiary: {
+      Middle: ['Standard', 'Flat', 'Angle', 'Step-Up'],
+      Side: ['Standard', 'Flat', 'Angle', 'Step-Up'],
+    },
+  },
+  {
+    label: 'Pick & Pop',
+    secondary: ['Middle', 'Side'],
+    tertiary: {
+      Middle: ['Standard', 'Flat', 'Angle', 'Step-Up'],
+      Side: ['Standard', 'Flat', 'Angle', 'Step-Up'],
+    },
+  },
+  {
+    label: 'Pick & Short Roll',
+    secondary: ['Middle', 'Side'],
+    tertiary: {
+      Middle: ['Standard', 'Flat', 'Angle', 'Step-Up'],
+      Side: ['Standard', 'Flat', 'Angle', 'Step-Up'],
+    },
+  },
+  { label: 'Slip Screen', secondary: ['Middle', 'Side'] },
+  { label: 'Ghost Screen', secondary: ['Middle', 'Side'] },
+  { label: 'Gortat Screen', secondary: ['Seal', 'Cross'] },
+  { label: 'Flip Ball Screen', secondary: ['Middle', 'Side'] },
+  {
+    label: 'Drag Screen',
+    secondary: ['Drag', 'Double Drag'],
+    tertiary: {
+      Drag: ['Standard', 'Flat', 'Angle'],
+      'Double Drag': ['Standard', 'Flat', 'Angle'],
+    },
+  },
+  { label: 'Twist / Re-Screen', secondary: ['Standard', 'Angle'] },
+]
+const DHO_ACTIONS = ['DHO', 'Fake DHO', 'DHO into Ball Screen', 'Re-Screen DHO', 'Pistol Action', 'Get Action', 'Curl & Dump']
+const OFF_BALL_ACTIONS = [
+  'Away Screen',
+  'Down Screen',
+  'Pin-Down',
+  'Cross Screen',
+  'Back Screen',
+  'Flare Screen',
+  'Stagger',
+  'Double Screen (Parallel)',
+  'Elevator Screen',
+]
+const CUT_ACTIONS = ['Cut']
+const COVERAGE_ACTIONS = [
+  { label: 'Over', secondary: ['High Show', 'At Level', 'Drop'] },
+  { label: 'Under', secondary: ['High Show', 'At Level', 'Drop'] },
+  { label: 'Switch' },
+  { label: 'Ice/Down' },
+  { label: 'Blitz/Trap' },
+  { label: 'Hedge' },
+  { label: 'Peel Switch' },
+  { label: 'Gap/Weak' },
+]
+const ISO_COVERAGE_OPTIONS = ['Drive Middle', 'Drive Baseline', 'No Drive']
+const HELP_ACTIONS = [
+  'Low-Man Help',
+  'Tag the Roller',
+  'Gap / Stunt & Recover',
+  'Sink & Fill',
+  'X-Out / Scramble',
+  'Help the Helper',
+  'Peel / Late Switch',
+  'No Help / Stay Home',
+]
+const BREAKDOWN_ACTIONS = [
+  'None',
+  'Stuck on Screen',
+  'Late Chase / Slow Recovery',
+  'Late Help',
+  'No Help / Missed Rotation',
+  'Missed Tag',
+  'Poor Closeout',
+  'Over Helped',
+  'Beat Off Dribble',
+  'Ball Watching / Backcut',
+  'Wrong Coverage / Miscommunication',
+  'Transition Mismatch / Not Matched',
+]
+const COMMUNICATION_ACTIONS = [
+  'Unknown',
+  'Confirmed Verbal',
+  'Visual / Hand Signal',
+  'Late Communication',
+  'Miscommunication',
+  'No Communication',
+]
+const OUTCOME_ACTIONS = ['Contained', 'Advantage Created', 'Forced Help', 'Other']
+
 const ClipEditModal = ({ clip, isOpen, onClose, onSave, onDelete }: ClipEditModalProps) => {
   const [formData, setFormData] = useState<Partial<Clip>>({})
   const [saving, setSaving] = useState(false)
@@ -104,13 +208,33 @@ const ClipEditModal = ({ clip, isOpen, onClose, onSave, onDelete }: ClipEditModa
     playActions: false,
     defensive: false,
     shotData: false,
+    actions: false,
     notes: false,
   })
 
   const [pickerState, setPickerState] = useState<{
     field: string | null
     inputRef: HTMLInputElement | null
+    actionIndex?: number
   }>({ field: null, inputRef: null })
+
+  const [actionTypePickerState, setActionTypePickerState] = useState<{
+    index: number
+    step: 'primary' | 'secondary' | 'tertiary' | 'dho' | 'offball' | 'cut'
+    primary?: string
+    secondary?: string
+  } | null>(null)
+
+  const [coveragePickerState, setCoveragePickerState] = useState<{
+    index: number
+    step: 'primary' | 'secondary'
+    primary?: string
+  } | null>(null)
+
+  const [helpPickerState, setHelpPickerState] = useState<{ index: number } | null>(null)
+  const [breakdownPickerState, setBreakdownPickerState] = useState<{ index: number } | null>(null)
+  const [communicationPickerState, setCommunicationPickerState] = useState<{ index: number } | null>(null)
+  const [outcomePickerState, setOutcomePickerState] = useState<{ index: number } | null>(null)
 
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
@@ -118,6 +242,7 @@ const ClipEditModal = ({ clip, isOpen, onClose, onSave, onDelete }: ClipEditModa
     if (isOpen && clip) {
       setFormData({
         gameId: clip.gameId,
+        gameScore: clip.gameScore,
         location: clip.location ?? clip.locationDisplay ?? clip.gameLocation,
         opponent: clip.opponent,
         quarter: clip.quarter,
@@ -126,13 +251,8 @@ const ClipEditModal = ({ clip, isOpen, onClose, onSave, onDelete }: ClipEditModa
         formation: clip.formation,
         playName: clip.playName,
         scoutCoverage: clip.scoutCoverage,
-        actionTrigger: clip.actionTrigger,
-        actionTypes: clip.actionTypes,
-        actionSequence: clip.actionSequence,
+        playTrigger: clip.playTrigger,
         coverage: clip.coverage,
-        ballScreen: clip.ballScreen,
-        offBallScreen: clip.offBallScreen,
-        helpRotation: clip.helpRotation,
         disruption: clip.disruption,
         breakdown: clip.breakdown,
         playResult: clip.playResult,
@@ -143,6 +263,7 @@ const ClipEditModal = ({ clip, isOpen, onClose, onSave, onDelete }: ClipEditModa
         rebound: clip.rebound,
         points: clip.points,
         notes: clip.notes,
+        actions: clip.actions ?? [],
       })
       setError(null)
     }
@@ -152,54 +273,303 @@ const ClipEditModal = ({ clip, isOpen, onClose, onSave, onDelete }: ClipEditModa
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
+  const handleActionChange = (index: number, field: keyof TagAction, value: string) => {
+    setFormData((prev) => {
+      const actions = [...((prev.actions as TagAction[]) || [])]
+      actions[index] = { ...actions[index], [field]: value }
+      return { ...prev, actions }
+    })
+  }
+
+  const handleAddAction = () => {
+    setFormData((prev) => {
+      const actions = [...((prev.actions as TagAction[]) || [])]
+      actions.push({
+        phase: '',
+        type: '',
+        coverage: '',
+        help: '',
+        breakdown: '',
+        communication: '',
+        outcome: '',
+      })
+      return { ...prev, actions }
+    })
+  }
+
+  const handleRemoveAction = (index: number) => {
+    setFormData((prev) => {
+      const actions = [...((prev.actions as TagAction[]) || [])]
+      actions.splice(index, 1)
+      return { ...prev, actions }
+    })
+  }
+
   const toggleSection = (section: string) => {
     setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }))
   }
 
-  const handleInputFocus = (field: string, input: HTMLInputElement) => {
-    if (field in FIELD_OPTIONS) {
-      setPickerState({ field, inputRef: input })
+  const handleInputFocus = (field: string, input: HTMLInputElement, actionIndex?: number) => {
+    if (actionIndex === undefined) {
+      // Regular field (not action)
+      if (field in FIELD_OPTIONS) {
+        setPickerState({ field, inputRef: input })
+      }
+      return
+    }
+
+    // Action field
+    const actions = (formData.actions as TagAction[]) || []
+    const action = actions[actionIndex]
+
+    if (field === 'type') {
+      const phaseValue = action?.phase?.toLowerCase() || ''
+      if (phaseValue.includes('on-ball')) {
+        setActionTypePickerState({ index: actionIndex, step: 'primary' })
+        setPickerState({ field, inputRef: input, actionIndex })
+      } else if (phaseValue.includes('dho')) {
+        setActionTypePickerState({ index: actionIndex, step: 'dho' })
+        setPickerState({ field, inputRef: input, actionIndex })
+      } else if (phaseValue.includes('off-ball')) {
+        setActionTypePickerState({ index: actionIndex, step: 'offball' })
+        setPickerState({ field, inputRef: input, actionIndex })
+      } else if (phaseValue.includes('cut')) {
+        setActionTypePickerState({ index: actionIndex, step: 'cut' })
+        setPickerState({ field, inputRef: input, actionIndex })
+      }
+    } else if (field === 'coverage') {
+      const actionType = action?.type?.toLowerCase() || ''
+      if (actionType.includes('iso')) {
+        setCoveragePickerState({ index: actionIndex, step: 'primary' })
+        setPickerState({ field, inputRef: input, actionIndex })
+      } else {
+        setCoveragePickerState({ index: actionIndex, step: 'primary' })
+        setPickerState({ field, inputRef: input, actionIndex })
+      }
+    } else if (field === 'help') {
+      setHelpPickerState({ index: actionIndex })
+      setPickerState({ field, inputRef: input, actionIndex })
+    } else if (field === 'breakdown') {
+      setBreakdownPickerState({ index: actionIndex })
+      setPickerState({ field, inputRef: input, actionIndex })
+    } else if (field === 'communication') {
+      setCommunicationPickerState({ index: actionIndex })
+      setPickerState({ field, inputRef: input, actionIndex })
+    } else if (field === 'outcome') {
+      setOutcomePickerState({ index: actionIndex })
+      setPickerState({ field, inputRef: input, actionIndex })
+    } else if (field === 'phase') {
+      setPickerState({ field, inputRef: input, actionIndex })
     }
   }
 
   const handlePickerSelect = (value: string) => {
-    if (!pickerState.field || !pickerState.inputRef) return
-
-    const currentValue = pickerState.inputRef.value
-    const parts = currentValue.split(',').map((s) => s.trim()).filter(Boolean)
-    parts.push(value)
-    const newValue = parts.join(', ')
-
-    handleChange(pickerState.field as keyof Clip, newValue)
-
-    setTimeout(() => {
-      if (pickerState.inputRef) {
-        pickerState.inputRef.focus()
-        pickerState.inputRef.selectionStart = pickerState.inputRef.selectionEnd = newValue.length
+    if (!pickerState.field || !pickerState.inputRef || pickerState.actionIndex === undefined) {
+      // Regular field selection
+      if (pickerState.field && pickerState.inputRef) {
+        const currentValue = pickerState.inputRef.value
+        const parts = currentValue.split(',').map((s) => s.trim()).filter(Boolean)
+        parts.push(value)
+        const newValue = parts.join(', ')
+        handleChange(pickerState.field as keyof Clip, newValue)
+        setTimeout(() => {
+          if (pickerState.inputRef) {
+            pickerState.inputRef.focus()
+            pickerState.inputRef.selectionStart = pickerState.inputRef.selectionEnd = newValue.length
+          }
+        }, 0)
       }
-    }, 0)
+      return
+    }
+
+    const index = pickerState.actionIndex
+
+    // Action Type multi-level picker
+    if (pickerState.field === 'type' && actionTypePickerState) {
+      if (actionTypePickerState.step === 'primary') {
+        const primaryNode = ON_BALL_ACTIONS.find((item) => item.label === value)
+        if (primaryNode?.secondary && primaryNode.secondary.length > 0) {
+          setActionTypePickerState({ ...actionTypePickerState, step: 'secondary', primary: value })
+        } else {
+          handleActionChange(index, 'type', value)
+          handlePickerClose()
+        }
+        return
+      }
+      if (actionTypePickerState.step === 'secondary') {
+        const primaryNode = ON_BALL_ACTIONS.find((item) => item.label === actionTypePickerState.primary)
+        const tertiaryOptions = primaryNode?.tertiary?.[value]
+        if (tertiaryOptions && tertiaryOptions.length > 0) {
+          setActionTypePickerState({ ...actionTypePickerState, step: 'tertiary', secondary: value })
+        } else {
+          const formatted = `${actionTypePickerState.primary} / ${value}`
+          handleActionChange(index, 'type', formatted)
+          handlePickerClose()
+        }
+        return
+      }
+      if (actionTypePickerState.step === 'tertiary') {
+        const formatted = `${actionTypePickerState.primary} / ${actionTypePickerState.secondary} / ${value}`
+        handleActionChange(index, 'type', formatted)
+        handlePickerClose()
+        return
+      }
+      if (['dho', 'offball', 'cut'].includes(actionTypePickerState.step)) {
+        handleActionChange(index, 'type', value)
+        handlePickerClose()
+        return
+      }
+    }
+
+    // Coverage multi-level picker
+    if (pickerState.field === 'coverage' && coveragePickerState) {
+      const actions = (formData.actions as TagAction[]) || []
+      const action = actions[coveragePickerState.index]
+      const actionType = action?.type?.toLowerCase() || ''
+
+      if (actionType.includes('iso')) {
+        handleActionChange(index, 'coverage', value)
+        handlePickerClose()
+        return
+      }
+
+      if (coveragePickerState.step === 'primary') {
+        const primaryNode = COVERAGE_ACTIONS.find((item) => item.label === value)
+        if (primaryNode?.secondary && primaryNode.secondary.length > 0) {
+          setCoveragePickerState({ ...coveragePickerState, step: 'secondary', primary: value })
+        } else {
+          handleActionChange(index, 'coverage', value)
+          handlePickerClose()
+        }
+        return
+      }
+      if (coveragePickerState.step === 'secondary') {
+        const formatted = `${coveragePickerState.primary} / ${value}`
+        handleActionChange(index, 'coverage', formatted)
+        handlePickerClose()
+        return
+      }
+    }
+
+    // Single-level pickers
+    if (pickerState.field === 'help' || pickerState.field === 'breakdown' ||
+        pickerState.field === 'communication' || pickerState.field === 'outcome' ||
+        pickerState.field === 'phase') {
+      const currentValue = pickerState.inputRef.value
+      const parts = currentValue.split(',').map((s) => s.trim()).filter(Boolean)
+      parts.push(value)
+      const newValue = parts.join(', ')
+      handleActionChange(index, pickerState.field as keyof TagAction, newValue)
+      setTimeout(() => {
+        if (pickerState.inputRef) {
+          pickerState.inputRef.focus()
+          pickerState.inputRef.selectionStart = pickerState.inputRef.selectionEnd = newValue.length
+        }
+      }, 0)
+    }
   }
 
   const handlePickerClose = () => {
     setPickerState({ field: null, inputRef: null })
+    setActionTypePickerState(null)
+    setCoveragePickerState(null)
+    setHelpPickerState(null)
+    setBreakdownPickerState(null)
+    setCommunicationPickerState(null)
+    setOutcomePickerState(null)
   }
 
-  const getInputProps = (field: string) => {
-    const hasOptions = field in FIELD_OPTIONS
+  const getInputProps = (field: string, actionIndex?: number) => {
+    const actionFields = ['phase', 'type', 'coverage', 'help', 'breakdown', 'communication', 'outcome']
+    const hasOptions = (field in FIELD_OPTIONS) || (actionIndex !== undefined && actionFields.includes(field))
     return hasOptions
       ? {
-          onFocus: (e: React.FocusEvent<HTMLInputElement>) => handleInputFocus(field, e.target),
+          onFocus: (e: React.FocusEvent<HTMLInputElement>) => handleInputFocus(field, e.target, actionIndex),
           onClick: (e: React.MouseEvent<HTMLInputElement>) =>
-            handleInputFocus(field, e.target as HTMLInputElement),
+            handleInputFocus(field, e.target as HTMLInputElement, actionIndex),
           ref: (el: HTMLInputElement | null) => {
-            inputRefs.current[field] = el
+            const key = actionIndex !== undefined ? `${field}_${actionIndex}` : field
+            inputRefs.current[key] = el
           },
         }
       : {
           ref: (el: HTMLInputElement | null) => {
-            inputRefs.current[field] = el
+            const key = actionIndex !== undefined ? `${field}_${actionIndex}` : field
+            inputRefs.current[key] = el
           },
         }
+  }
+
+  const getPickerOptions = (): string[] => {
+    if (!pickerState.field) return []
+
+    // Regular fields
+    if (pickerState.actionIndex === undefined) {
+      return FIELD_OPTIONS[pickerState.field] || []
+    }
+
+    // Action fields
+    const actions = (formData.actions as TagAction[]) || []
+    const action = actions[pickerState.actionIndex]
+
+    if (pickerState.field === 'phase') {
+      return PHASE_OPTIONS
+    }
+
+    if (pickerState.field === 'type' && actionTypePickerState) {
+      if (actionTypePickerState.step === 'primary') {
+        return ON_BALL_ACTIONS.map((item) => item.label)
+      }
+      if (actionTypePickerState.step === 'secondary') {
+        const primaryNode = ON_BALL_ACTIONS.find((item) => item.label === actionTypePickerState.primary)
+        return primaryNode?.secondary ?? []
+      }
+      if (actionTypePickerState.step === 'tertiary') {
+        const primaryNode = ON_BALL_ACTIONS.find((item) => item.label === actionTypePickerState.primary)
+        return primaryNode?.tertiary?.[actionTypePickerState.secondary ?? ''] ?? []
+      }
+      if (actionTypePickerState.step === 'dho') {
+        return DHO_ACTIONS
+      }
+      if (actionTypePickerState.step === 'offball') {
+        return OFF_BALL_ACTIONS
+      }
+      if (actionTypePickerState.step === 'cut') {
+        return CUT_ACTIONS
+      }
+    }
+
+    if (pickerState.field === 'coverage' && coveragePickerState) {
+      const actionType = action?.type?.toLowerCase() || ''
+      if (actionType.includes('iso')) {
+        return ISO_COVERAGE_OPTIONS
+      }
+      if (coveragePickerState.step === 'primary') {
+        return COVERAGE_ACTIONS.map((item) => item.label)
+      }
+      if (coveragePickerState.step === 'secondary') {
+        const primaryNode = COVERAGE_ACTIONS.find((item) => item.label === coveragePickerState.primary)
+        return primaryNode?.secondary ?? []
+      }
+    }
+
+    if (pickerState.field === 'help' && helpPickerState) {
+      return HELP_ACTIONS
+    }
+
+    if (pickerState.field === 'breakdown' && breakdownPickerState) {
+      return BREAKDOWN_ACTIONS
+    }
+
+    if (pickerState.field === 'communication' && communicationPickerState) {
+      return COMMUNICATION_ACTIONS
+    }
+
+    if (pickerState.field === 'outcome' && outcomePickerState) {
+      return OUTCOME_ACTIONS
+    }
+
+    return []
   }
 
   const handleSave = async () => {
@@ -271,6 +641,15 @@ const ClipEditModal = ({ clip, isOpen, onClose, onSave, onDelete }: ClipEditModa
                   />
                 </div>
                 <div className="clip-edit-field">
+                  <label>Game Score</label>
+                  <input
+                    type="text"
+                    value={formData.gameScore ?? ''}
+                    onChange={(e) => handleChange('gameScore', e.target.value)}
+                    placeholder="e.g., 75-68 W"
+                  />
+                </div>
+                <div className="clip-edit-field">
                   <label>Quarter</label>
                   <input
                     type="text"
@@ -314,7 +693,8 @@ const ClipEditModal = ({ clip, isOpen, onClose, onSave, onDelete }: ClipEditModa
                     type="text"
                     value={formData.formation ?? ''}
                     onChange={(e) => handleChange('formation', e.target.value)}
-                    placeholder="e.g., Horns, 5-Out, 1-4 High"
+                    placeholder="Click to select or type..."
+                    {...getInputProps('formation')}
                   />
                 </div>
                 <div className="clip-edit-field clip-edit-field-full">
@@ -337,30 +717,12 @@ const ClipEditModal = ({ clip, isOpen, onClose, onSave, onDelete }: ClipEditModa
                   />
                 </div>
                 <div className="clip-edit-field clip-edit-field-full">
-                  <label>Action Trigger</label>
+                  <label>Play Trigger</label>
                   <input
                     type="text"
-                    value={formData.actionTrigger ?? ''}
-                    onChange={(e) => handleChange('actionTrigger', e.target.value)}
+                    value={formData.playTrigger ?? ''}
+                    onChange={(e) => handleChange('playTrigger', e.target.value)}
                     placeholder="e.g., Entry, DHO, Ball Screen"
-                  />
-                </div>
-                <div className="clip-edit-field clip-edit-field-full">
-                  <label>Action Type(s)</label>
-                  <input
-                    type="text"
-                    value={formData.actionTypes ?? ''}
-                    onChange={(e) => handleChange('actionTypes', e.target.value)}
-                    placeholder="Comma-separated actions"
-                  />
-                </div>
-                <div className="clip-edit-field clip-edit-field-full">
-                  <label>Action Sequence</label>
-                  <input
-                    type="text"
-                    value={formData.actionSequence ?? ''}
-                    onChange={(e) => handleChange('actionSequence', e.target.value)}
-                    placeholder="Describe the sequence of actions"
                   />
                 </div>
               </div>
@@ -383,36 +745,6 @@ const ClipEditModal = ({ clip, isOpen, onClose, onSave, onDelete }: ClipEditModa
                     onChange={(e) => handleChange('coverage', e.target.value)}
                     placeholder="Click to select or type..."
                     {...getInputProps('coverage')}
-                  />
-                </div>
-                <div className="clip-edit-field">
-                  <label>Ball Screen Coverage</label>
-                  <input
-                    type="text"
-                    value={formData.ballScreen ?? ''}
-                    onChange={(e) => handleChange('ballScreen', e.target.value)}
-                    placeholder="Click to select or type..."
-                    {...getInputProps('ballScreen')}
-                  />
-                </div>
-                <div className="clip-edit-field">
-                  <label>Off-Ball Screen Coverage</label>
-                  <input
-                    type="text"
-                    value={formData.offBallScreen ?? ''}
-                    onChange={(e) => handleChange('offBallScreen', e.target.value)}
-                    placeholder="Click to select or type..."
-                    {...getInputProps('offBallScreen')}
-                  />
-                </div>
-                <div className="clip-edit-field">
-                  <label>Help/Rotation</label>
-                  <input
-                    type="text"
-                    value={formData.helpRotation ?? ''}
-                    onChange={(e) => handleChange('helpRotation', e.target.value)}
-                    placeholder="Click to select or type..."
-                    {...getInputProps('helpRotation')}
                   />
                 </div>
                 <div className="clip-edit-field">
@@ -519,6 +851,131 @@ const ClipEditModal = ({ clip, isOpen, onClose, onSave, onDelete }: ClipEditModa
             )}
           </div>
 
+          {/* ⚡ Actions */}
+          <div className={`clip-edit-section ${expandedSections.actions ? '' : 'collapsed'}`}>
+            <h4 className="clip-edit-section-title" onClick={() => toggleSection('actions')}>
+              <span>⚡ Actions ({((formData.actions as TagAction[]) || []).length})</span>
+              <span className="clip-edit-toggle">{expandedSections.actions ? '−' : '+'}</span>
+            </h4>
+            {expandedSections.actions && (
+              <div style={{ padding: '12px', backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: '8px' }}>
+                {((formData.actions as TagAction[]) || []).map((action, index) => (
+                  <div key={index} style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: index < ((formData.actions as TagAction[]) || []).length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none' }}>
+                    <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'rgba(255,255,255,0.9)' }}>
+                        Action {index + 1}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveAction(index)}
+                        style={{
+                          background: '#dc2626',
+                          border: 'none',
+                          color: 'white',
+                          padding: '4px 12px',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '0.75rem',
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div className="clip-edit-grid">
+                      <div className="clip-edit-field">
+                        <label>Phase</label>
+                        <input
+                          type="text"
+                          value={action.phase || ''}
+                          onChange={(e) => handleActionChange(index, 'phase', e.target.value)}
+                          placeholder="Click to select..."
+                          {...getInputProps('phase', index)}
+                        />
+                      </div>
+                      <div className="clip-edit-field">
+                        <label>Type</label>
+                        <input
+                          type="text"
+                          value={action.type || ''}
+                          onChange={(e) => handleActionChange(index, 'type', e.target.value)}
+                          placeholder="Click to select..."
+                          {...getInputProps('type', index)}
+                        />
+                      </div>
+                      <div className="clip-edit-field">
+                        <label>Coverage</label>
+                        <input
+                          type="text"
+                          value={action.coverage || ''}
+                          onChange={(e) => handleActionChange(index, 'coverage', e.target.value)}
+                          placeholder="Click to select..."
+                          {...getInputProps('coverage', index)}
+                        />
+                      </div>
+                      <div className="clip-edit-field">
+                        <label>Help</label>
+                        <input
+                          type="text"
+                          value={action.help || ''}
+                          onChange={(e) => handleActionChange(index, 'help', e.target.value)}
+                          placeholder="Click to select..."
+                          {...getInputProps('help', index)}
+                        />
+                      </div>
+                      <div className="clip-edit-field">
+                        <label>Breakdown</label>
+                        <input
+                          type="text"
+                          value={action.breakdown || ''}
+                          onChange={(e) => handleActionChange(index, 'breakdown', e.target.value)}
+                          placeholder="Click to select..."
+                          {...getInputProps('breakdown', index)}
+                        />
+                      </div>
+                      <div className="clip-edit-field">
+                        <label>Communication</label>
+                        <input
+                          type="text"
+                          value={action.communication || ''}
+                          onChange={(e) => handleActionChange(index, 'communication', e.target.value)}
+                          placeholder="Click to select..."
+                          {...getInputProps('communication', index)}
+                        />
+                      </div>
+                      <div className="clip-edit-field">
+                        <label>Outcome</label>
+                        <input
+                          type="text"
+                          value={action.outcome || ''}
+                          onChange={(e) => handleActionChange(index, 'outcome', e.target.value)}
+                          placeholder="Click to select..."
+                          {...getInputProps('outcome', index)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={handleAddAction}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(132, 22, 23, 0.2)',
+                    border: '1px dashed rgba(132, 22, 23, 0.5)',
+                    color: 'rgba(255,255,255,0.9)',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem',
+                    fontWeight: 500,
+                  }}
+                >
+                  + Add Action
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* 📝 Notes */}
           <div className={`clip-edit-section ${expandedSections.notes ? '' : 'collapsed'}`}>
             <h4 className="clip-edit-section-title" onClick={() => toggleSection('notes')}>
@@ -568,10 +1025,39 @@ const ClipEditModal = ({ clip, isOpen, onClose, onSave, onDelete }: ClipEditModa
       {pickerState.field && pickerState.inputRef && (
         <FloatingPicker
           inputRef={pickerState.inputRef}
-          options={FIELD_OPTIONS[pickerState.field] || []}
+          options={getPickerOptions()}
           isOpen={true}
           onSelect={handlePickerSelect}
           onClose={handlePickerClose}
+          highlightRule={
+            pickerState.field === 'type' && actionTypePickerState
+              ? (option) => {
+                  if (actionTypePickerState.step === 'primary') {
+                    const primaryNode = ON_BALL_ACTIONS.find((item) => item.label === option)
+                    return Boolean(primaryNode?.secondary && primaryNode.secondary.length > 0)
+                  }
+                  if (actionTypePickerState.step === 'secondary') {
+                    const primaryNode = ON_BALL_ACTIONS.find((item) => item.label === actionTypePickerState.primary)
+                    return Boolean(primaryNode?.tertiary?.[option]?.length)
+                  }
+                  return false
+                }
+              : pickerState.field === 'coverage' && coveragePickerState
+              ? (option) => {
+                  const actions = (formData.actions as TagAction[]) || []
+                  const action = actions[coveragePickerState.index]
+                  const actionType = action?.type?.toLowerCase() || ''
+                  if (actionType.includes('iso')) {
+                    return false
+                  }
+                  if (coveragePickerState.step === 'primary') {
+                    const primaryNode = COVERAGE_ACTIONS.find((item) => item.label === option)
+                    return Boolean(primaryNode?.secondary && primaryNode.secondary.length > 0)
+                  }
+                  return false
+                }
+              : undefined
+          }
         />
       )}
     </>

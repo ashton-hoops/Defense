@@ -80,13 +80,6 @@ export class LocalAdapter implements DataAdapter {
       throw new Error(`Failed to load clip ${id}`)
     }
     const payload = await response.json()
-    console.log('🐛 Raw clip data from API:', {
-      formation: payload.formation,
-      coverage: payload.coverage,
-      ball_screen: payload.ball_screen,
-      off_ball_screen: payload.off_ball_screen,
-      disruption: payload.disruption,
-    })
     return normalizeClip(payload)
   }
 
@@ -187,6 +180,20 @@ export class LocalAdapter implements DataAdapter {
     const normalized = normalizeClip(clipPayload)
     syncClipToCache(normalized)
     return normalized
+  }
+
+  async deleteGame(gameId: string): Promise<void> {
+    const trimmed = gameId?.toString().trim()
+    if (!trimmed) {
+      throw new Error('gameId is required')
+    }
+    const response = await fetch(this.buildUrl(`/api/games/${encodeURIComponent(trimmed)}`), {
+      method: 'DELETE',
+    })
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '')
+      throw new Error(`Failed to delete game ${trimmed}: ${response.status} ${detail}`)
+    }
   }
 
   async deleteClip(id: string): Promise<void> {
