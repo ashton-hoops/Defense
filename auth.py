@@ -122,6 +122,31 @@ def require_admin(f):
     return decorated
 
 
+def require_write(f):
+    """Decorator to require write access (admin or coach, but not guest)"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        # In local mode, allow writes
+        if not is_cloud():
+            request.user = {'username': 'local', 'role': 'admin'}
+            return f(*args, **kwargs)
+
+        # In cloud mode, check role
+        user = get_user_from_token()
+
+        if not user:
+            return jsonify({'error': 'Authentication required'}), 401
+
+        if user.get('role') == 'guest':
+            return jsonify({'error': 'Write access not allowed for guest users'}), 403
+
+        request.user = user
+
+        return f(*args, **kwargs)
+
+    return decorated
+
+
 def hash_password(plain_password: str) -> str:
     """Hash a password for storage (helper function)"""
     salt = bcrypt.gensalt(rounds=12)
