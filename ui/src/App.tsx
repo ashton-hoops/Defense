@@ -112,7 +112,9 @@ const IframePage = ({ src }: { src: string }) => {
 const Layout = () => {
   const location = useLocation()
   const navigate = useNavigate()
-  const [dataMode, setDataMode] = useState<DataMode>('local')
+  // Default to 'cloud' in production, 'local' in development
+  const defaultMode: DataMode = import.meta.env.DEV ? 'local' : 'cloud'
+  const [dataMode, setDataMode] = useState<DataMode>(defaultMode)
   const [clipRefreshKey, setClipRefreshKey] = useState(0)
   const [selectedClipSummary, setSelectedClipSummary] = useState<ClipSummary | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
