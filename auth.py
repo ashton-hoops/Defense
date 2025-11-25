@@ -28,6 +28,10 @@ def parse_users():
 
 USER_DB = parse_users()
 
+# Debug: Print loaded users (without password hashes)
+if is_cloud():
+    print(f"🔐 Loaded {len(USER_DB)} users: {list(USER_DB.keys())}")
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash"""
