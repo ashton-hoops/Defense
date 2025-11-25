@@ -39,7 +39,7 @@ else:
 
 # Authentication
 JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'dev-secret-change-in-production')
-JWT_EXPIRATION_DAYS = 7
+JWT_EXPIRATION_DAYS = 30  # 30-day "remember me" tokens
 
 # User credentials (format: username:bcrypt_hash:role)
 # In production, set via environment variable
