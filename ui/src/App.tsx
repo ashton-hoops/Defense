@@ -5,6 +5,7 @@ import ReactClipsPanel from './components/ReactClipsPanel'
 import ReactDashboard from './components/ReactDashboard'
 import ReactGameDetail from './components/ReactGameDetail'
 import ReactTaggerNative from './components/ReactTaggerNative'
+import Login from './components/Login'
 import type { DataMode } from './lib/data'
 import { toClipSummary, type ClipSummary } from './lib/data/transformers'
 import type { Clip } from './lib/types'
@@ -105,8 +106,28 @@ const Layout = () => {
   const [dataMode, setDataMode] = useState<DataMode>('local')
   const [clipRefreshKey, setClipRefreshKey] = useState(0)
   const [selectedClipSummary, setSelectedClipSummary] = useState<ClipSummary | null>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [username, setUsername] = useState('')
+  const [role, setRole] = useState('')
 
   const envName = useMemo(() => deriveEnvName(), [])
+
+  // Check authentication on mount and when switching to cloud mode
+  useEffect(() => {
+    if (dataMode === 'cloud') {
+      const token = localStorage.getItem('auth_token')
+      const storedUsername = localStorage.getItem('username')
+      const storedRole = localStorage.getItem('role')
+
+      if (token && storedUsername && storedRole) {
+        setIsAuthenticated(true)
+        setUsername(storedUsername)
+        setRole(storedRole)
+      } else {
+        setIsAuthenticated(false)
+      }
+    }
+  }, [dataMode])
 
   // Listen for clip saved events from the Tagger
   useEffect(() => {
@@ -232,6 +253,23 @@ const Layout = () => {
     setDataMode((mode) => (mode === 'local' ? 'cloud' : 'local'))
   }
 
+  const handleLoginSuccess = (token: string, user: string, userRole: string) => {
+    setIsAuthenticated(true)
+    setUsername(user)
+    setRole(userRole)
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem('auth_token')
+    localStorage.removeItem('username')
+    localStorage.removeItem('role')
+    setIsAuthenticated(false)
+    setUsername('')
+    setRole('')
+    // Switch back to local mode on logout
+    setDataMode('local')
+  }
+
   const handleClipUpdated = (updatedClip: Clip) => {
     setClipRefreshKey((value) => value + 1)
     setSelectedClipSummary(toClipSummary(updatedClip))
@@ -287,26 +325,57 @@ const Layout = () => {
               )
             })}
           </nav>
+
+          <div className="flex items-center gap-3">
+            {/* Database Mode Toggle */}
+            <button
+              onClick={toggleDataMode}
+              className="rounded-full bg-white/10 px-3 py-1.5 text-[0.75rem] font-medium transition hover:bg-white/20 flex items-center gap-2"
+              title={`Switch to ${dataMode === 'local' ? 'cloud' : 'local'} mode`}
+            >
+              <span className={`w-2 h-2 rounded-full ${dataMode === 'cloud' ? 'bg-green-400' : 'bg-gray-400'}`} />
+              {dataMode === 'local' ? '💻 Local' : '☁️ Cloud'}
+            </button>
+
+            {/* User Info / Logout */}
+            {dataMode === 'cloud' && isAuthenticated && (
+              <div className="flex items-center gap-2">
+                <span className="text-[0.75rem] text-white/60">
+                  {username} ({role})
+                </span>
+                <button
+                  onClick={handleLogout}
+                  className="rounded-full bg-white/10 px-3 py-1.5 text-[0.75rem] font-medium transition hover:bg-red-500/20 hover:text-red-300"
+                >
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
       <main className="flex flex-1 flex-col bg-[#0a0a0a] min-h-0 overflow-hidden">
-        <div className="flex flex-1 flex-col px-6 pb-0 min-h-0 overflow-hidden">
-          <div className="relative flex-1 min-h-0">
-            <Outlet
-              context={{
-                dataMode,
-                clipRefreshKey,
-                selectedClipSummary,
-                handleOpenClip,
-                navigateBackToDashboard,
-                navigateBackToClipGame,
-                handleClipUpdated,
-                handleSelectGame,
-              }}
-            />
+        {dataMode === 'cloud' && !isAuthenticated ? (
+          <Login onLoginSuccess={handleLoginSuccess} />
+        ) : (
+          <div className="flex flex-1 flex-col px-6 pb-0 min-h-0 overflow-hidden">
+            <div className="relative flex-1 min-h-0">
+              <Outlet
+                context={{
+                  dataMode,
+                  clipRefreshKey,
+                  selectedClipSummary,
+                  handleOpenClip,
+                  navigateBackToDashboard,
+                  navigateBackToClipGame,
+                  handleClipUpdated,
+                  handleSelectGame,
+                }}
+              />
+            </div>
           </div>
-        </div>
+        )}
       </main>
     </div>
   )
