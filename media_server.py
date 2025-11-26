@@ -1109,9 +1109,10 @@ def api_deploy():
             steps[-1] = {'step': 'db_clone', 'status': 'failed', 'message': f'Database clone failed: {str(e)}'}
             # Continue with deployment even if clone fails
 
-        # Step 2: Build React app
+        # Step 3: Build React app
         steps.append({'step': 'build', 'status': 'running', 'message': 'Building React app...'})
-        print("📦 Building React app...")
+        print("📦 Building React app...", flush=True)
+        sys.stdout.flush()
 
         ui_dir = PROJECT_ROOT / 'ui'
         build_result = subprocess.run(
@@ -1123,17 +1124,20 @@ def api_deploy():
         )
 
         if build_result.returncode != 0:
+            print(f"❌ Build failed: {build_result.stderr}", flush=True)
             return jsonify({
                 'error': 'Build failed',
                 'details': build_result.stderr,
                 'steps': steps
             }), 500
 
+        print(f"✅ React app built successfully", flush=True)
         steps[-1] = {'step': 'build', 'status': 'success', 'message': 'React app built successfully'}
 
-        # Step 2: Git add
+        # Step 4: Git add
         steps.append({'step': 'git_add', 'status': 'running', 'message': 'Staging changes...'})
-        print("📝 Staging git changes...")
+        print("📝 Staging git changes...", flush=True)
+        sys.stdout.flush()
 
         git_add_result = subprocess.run(
             ['git', 'add', '-A'],
@@ -1144,17 +1148,20 @@ def api_deploy():
         )
 
         if git_add_result.returncode != 0:
+            print(f"❌ Git add failed: {git_add_result.stderr}", flush=True)
             return jsonify({
                 'error': 'Git add failed',
                 'details': git_add_result.stderr,
                 'steps': steps
             }), 500
 
+        print(f"✅ Changes staged", flush=True)
         steps[-1] = {'step': 'git_add', 'status': 'success', 'message': 'Changes staged'}
 
-        # Step 3: Git commit
+        # Step 5: Git commit
         steps.append({'step': 'git_commit', 'status': 'running', 'message': 'Committing changes...'})
-        print("💾 Committing changes...")
+        print("💾 Committing changes...", flush=True)
+        sys.stdout.flush()
 
         commit_message = """Auto-deploy: Sync database and code changes
 
@@ -1172,19 +1179,23 @@ Co-Authored-By: Claude <noreply@anthropic.com>"""
 
         # Check if there's nothing to commit
         if 'nothing to commit' in git_commit_result.stdout.lower():
+            print("ℹ️  No code changes to commit", flush=True)
             steps[-1] = {'step': 'git_commit', 'status': 'skipped', 'message': 'No code changes to commit'}
         elif git_commit_result.returncode != 0:
+            print(f"❌ Git commit failed: {git_commit_result.stderr}", flush=True)
             return jsonify({
                 'error': 'Git commit failed',
                 'details': git_commit_result.stderr,
                 'steps': steps
             }), 500
         else:
+            print(f"✅ Changes committed", flush=True)
             steps[-1] = {'step': 'git_commit', 'status': 'success', 'message': 'Changes committed'}
 
-        # Step 4: Git push
+        # Step 6: Git push
         steps.append({'step': 'git_push', 'status': 'running', 'message': 'Pushing to GitHub...'})
-        print("🚀 Pushing to GitHub...")
+        print("🚀 Pushing to GitHub...", flush=True)
+        sys.stdout.flush()
 
         git_push_result = subprocess.run(
             ['git', 'push'],
@@ -1197,17 +1208,20 @@ Co-Authored-By: Claude <noreply@anthropic.com>"""
         if git_push_result.returncode != 0:
             # Check if it's because there's nothing to push
             if 'Everything up-to-date' in git_push_result.stderr or 'Everything up-to-date' in git_push_result.stdout:
+                print("ℹ️  Already up-to-date", flush=True)
                 steps[-1] = {'step': 'git_push', 'status': 'skipped', 'message': 'Already up-to-date'}
             else:
+                print(f"❌ Git push failed: {git_push_result.stderr}", flush=True)
                 return jsonify({
                     'error': 'Git push failed',
                     'details': git_push_result.stderr,
                     'steps': steps
                 }), 500
         else:
+            print(f"✅ Pushed to GitHub - Render will auto-deploy", flush=True)
             steps[-1] = {'step': 'git_push', 'status': 'success', 'message': 'Pushed to GitHub - Render will auto-deploy'}
 
-        print("✅ Deploy complete!")
+        print("✅ Deploy complete!", flush=True)
 
         return jsonify({
             'success': True,
