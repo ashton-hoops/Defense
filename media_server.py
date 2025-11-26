@@ -915,12 +915,13 @@ def api_login():
 
 @app.route('/api/deploy', methods=['POST'])
 def api_deploy():
-    """Deploy code changes to cloud - only works in local mode"""
+    """Deploy code changes to cloud - COMPLETE DATABASE CLONE"""
     import subprocess
     import os
     import sys
+    import sqlite3
 
-    print("🚀 DEPLOY ENDPOINT CALLED", flush=True)
+    print("🚀 DEPLOY ENDPOINT CALLED - FULL DATABASE CLONE MODE", flush=True)
     sys.stdout.flush()
 
     # Only allow in local mode
@@ -930,78 +931,45 @@ def api_deploy():
     try:
         steps = []
 
-        # Step 1: Sync database to cloud
-        steps.append({'step': 'db_sync', 'status': 'running', 'message': 'Syncing database to cloud...'})
-        print("☁️  Syncing database to cloud...", flush=True)
+        # Step 1: Complete database clone to cloud
+        steps.append({'step': 'db_clone', 'status': 'running', 'message': 'Cloning entire database to cloud...'})
+        print("☁️  CLONING ENTIRE DATABASE TO CLOUD...", flush=True)
         sys.stdout.flush()
 
         try:
-            # Direct connection to cloud PostgreSQL
             import psycopg
             from psycopg.rows import dict_row
 
             cloud_db_url = 'postgresql://ou_basketball_db_user:1mKo7AhmuSe8fH3wJBXH7Sonp0MV6riw@dpg-d4iknhur433s73a38t10-a.oregon-postgres.render.com/ou_basketball_db?sslmode=require'
 
-            # Fetch all clips from local database
-            local_clips = fetch_clips()
+            # Connect to local SQLite
+            local_db_path = PROJECT_ROOT / 'data' / 'analytics.sqlite'
+            local_conn = sqlite3.connect(str(local_db_path))
+            local_conn.row_factory = sqlite3.Row
+            local_cur = local_conn.cursor()
 
-            if local_clips and len(local_clips) > 0:
-                print(f"📊 Found {len(local_clips)} clips to sync")
+            # Connect to cloud PostgreSQL
+            cloud_conn = psycopg.connect(cloud_db_url, autocommit=False)
+            cloud_cur = cloud_conn.cursor()
 
-                # Connect to cloud database and push each clip
-                conn = psycopg.connect(cloud_db_url, row_factory=dict_row, autocommit=False)
-                cur = conn.cursor()
+            # Step 1: Clear cloud database
+            print("  🗑️  Clearing cloud database...", flush=True)
+            cloud_cur.execute("DELETE FROM clips")
+            cloud_conn.commit()
 
-                for clip in local_clips:
-                    # Prepare clip data mapped to cloud database schema (sync ALL fields)
-                    import json
-                    clip_data = {
-                        'id': clip.get('id'),
-                        'filename': clip.get('filename'),
-                        'path': clip.get('path'),
-                        'source_video': clip.get('source_video'),
-                        'game_id': clip.get('game_id'),
-                        'canonical_game_id': clip.get('canonical_game_id'),
-                        'canonical_clip_id': clip.get('canonical_clip_id'),
-                        'opponent': clip.get('opponent'),
-                        'opponent_slug': clip.get('opponent_slug'),
-                        'location': clip.get('location'),
-                        'game_score': clip.get('game_score'),
-                        'quarter': clip.get('quarter'),
-                        'possession': clip.get('possession'),
-                        'situation': clip.get('situation'),
-                        'formation': clip.get('formation'),
-                        'play_name': clip.get('play_name'),
-                        'scout_coverage': clip.get('scout_coverage'),
-                        'play_trigger': clip.get('play_trigger'),
-                        'action_types': clip.get('action_types'),
-                        'action_sequence': clip.get('action_sequence'),
-                        'coverage': clip.get('coverage'),
-                        'ball_screen': clip.get('ball_screen'),
-                        'off_ball_screen': clip.get('off_ball_screen'),
-                        'help_rotation': clip.get('help_rotation'),
-                        'disruption': clip.get('disruption'),
-                        'breakdown': clip.get('breakdown'),
-                        'result': clip.get('result'),
-                        'paint_touch': clip.get('paint_touch'),
-                        'shooter': clip.get('shooter'),
-                        'shot_location': clip.get('shot_location'),
-                        'contest': clip.get('contest'),
-                        'rebound': clip.get('rebound'),
-                        'points': clip.get('points'),
-                        'has_shot': clip.get('has_shot'),
-                        'shot_x': clip.get('shot_x'),
-                        'shot_y': clip.get('shot_y'),
-                        'shot_result': clip.get('shot_result'),
-                        'player_designation': clip.get('player_designation'),
-                        'notes': clip.get('notes'),
-                        'start_time': clip.get('start_time'),
-                        'end_time': clip.get('end_time'),
-                        'actions_json': clip.get('actions_json'),
-                    }
+            # Step 2: Get ALL data from local SQLite (raw, no transformation)
+            print("  📊 Reading local database...", flush=True)
+            local_cur.execute("SELECT * FROM clips")
+            local_clips = [dict(row) for row in local_cur.fetchall()]
 
-                    # Insert or update clip in cloud database
-                    cur.execute("""
+            print(f"  📦 Found {len(local_clips)} clips in local database", flush=True)
+
+            # Step 3: Bulk insert into cloud (raw copy)
+            if local_clips:
+                print(f"  ⬆️  Uploading {len(local_clips)} clips to cloud...", flush=True)
+
+                for i, clip in enumerate(local_clips, 1):
+                    cloud_cur.execute("""
                         INSERT INTO clips (
                             id, filename, path, source_video, game_id, canonical_game_id,
                             canonical_clip_id, opponent, opponent_slug, location, game_score,
@@ -1010,7 +978,8 @@ def api_deploy():
                             coverage, ball_screen, off_ball_screen, help_rotation, disruption,
                             breakdown, result, paint_touch, shooter, shot_location, contest,
                             rebound, points, has_shot, shot_x, shot_y, shot_result,
-                            player_designation, notes, start_time, end_time, actions_json
+                            player_designation, notes, start_time, end_time, actions_json,
+                            created_at, updated_at
                         ) VALUES (
                             %(id)s, %(filename)s, %(path)s, %(source_video)s, %(game_id)s,
                             %(canonical_game_id)s, %(canonical_clip_id)s, %(opponent)s,
@@ -1023,67 +992,29 @@ def api_deploy():
                             %(shot_location)s, %(contest)s, %(rebound)s, %(points)s,
                             %(has_shot)s, %(shot_x)s, %(shot_y)s, %(shot_result)s,
                             %(player_designation)s, %(notes)s, %(start_time)s, %(end_time)s,
-                            %(actions_json)s
+                            %(actions_json)s, %(created_at)s, %(updated_at)s
                         )
-                        ON CONFLICT (id) DO UPDATE SET
-                            filename = EXCLUDED.filename,
-                            path = EXCLUDED.path,
-                            source_video = EXCLUDED.source_video,
-                            game_id = EXCLUDED.game_id,
-                            canonical_game_id = EXCLUDED.canonical_game_id,
-                            canonical_clip_id = EXCLUDED.canonical_clip_id,
-                            opponent = EXCLUDED.opponent,
-                            opponent_slug = EXCLUDED.opponent_slug,
-                            location = EXCLUDED.location,
-                            game_score = EXCLUDED.game_score,
-                            quarter = EXCLUDED.quarter,
-                            possession = EXCLUDED.possession,
-                            situation = EXCLUDED.situation,
-                            formation = EXCLUDED.formation,
-                            play_name = EXCLUDED.play_name,
-                            scout_coverage = EXCLUDED.scout_coverage,
-                            play_trigger = EXCLUDED.play_trigger,
-                            action_types = EXCLUDED.action_types,
-                            action_sequence = EXCLUDED.action_sequence,
-                            coverage = EXCLUDED.coverage,
-                            ball_screen = EXCLUDED.ball_screen,
-                            off_ball_screen = EXCLUDED.off_ball_screen,
-                            help_rotation = EXCLUDED.help_rotation,
-                            disruption = EXCLUDED.disruption,
-                            breakdown = EXCLUDED.breakdown,
-                            result = EXCLUDED.result,
-                            paint_touch = EXCLUDED.paint_touch,
-                            shooter = EXCLUDED.shooter,
-                            shot_location = EXCLUDED.shot_location,
-                            contest = EXCLUDED.contest,
-                            rebound = EXCLUDED.rebound,
-                            points = EXCLUDED.points,
-                            has_shot = EXCLUDED.has_shot,
-                            shot_x = EXCLUDED.shot_x,
-                            shot_y = EXCLUDED.shot_y,
-                            shot_result = EXCLUDED.shot_result,
-                            player_designation = EXCLUDED.player_designation,
-                            notes = EXCLUDED.notes,
-                            start_time = EXCLUDED.start_time,
-                            end_time = EXCLUDED.end_time,
-                            actions_json = EXCLUDED.actions_json
-                    """, clip_data)
+                    """, clip)
 
-                conn.commit()
-                cur.close()
-                conn.close()
+                    if i % 10 == 0:
+                        print(f"    Progress: {i}/{len(local_clips)} clips...", flush=True)
 
-                steps[-1] = {'step': 'db_sync', 'status': 'success', 'message': f'Synced {len(local_clips)} clips to cloud'}
-                print(f"✅ Synced {len(local_clips)} clips to cloud")
-            else:
-                steps[-1] = {'step': 'db_sync', 'status': 'skipped', 'message': 'No clips to sync'}
-                print("⚠️  No clips found to sync")
+                cloud_conn.commit()
+                print(f"  ✅ Uploaded {len(local_clips)} clips successfully", flush=True)
+
+            local_conn.close()
+            cloud_cur.close()
+            cloud_conn.close()
+
+            steps[-1] = {'step': 'db_clone', 'status': 'success', 'message': f'Cloned {len(local_clips)} clips to cloud'}
+            print(f"✅ Database clone complete: {len(local_clips)} clips", flush=True)
+
         except Exception as e:
             import traceback
             traceback.print_exc()
-            print(f"⚠️  Database sync failed: {e}")
-            steps[-1] = {'step': 'db_sync', 'status': 'failed', 'message': f'Database sync failed: {str(e)}'}
-            # Continue with deployment even if sync fails
+            print(f"⚠️  Database clone failed: {e}", flush=True)
+            steps[-1] = {'step': 'db_clone', 'status': 'failed', 'message': f'Database clone failed: {str(e)}'}
+            # Continue with deployment even if clone fails
 
         # Step 2: Build React app
         steps.append({'step': 'build', 'status': 'running', 'message': 'Building React app...'})
