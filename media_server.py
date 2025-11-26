@@ -947,11 +947,14 @@ def api_deploy():
                 cur = conn.cursor()
 
                 for clip in local_clips:
-                    # Prepare clip data with defaults for missing fields
+                    # Prepare clip data mapped to cloud database schema
+                    import json
                     clip_data = {
                         'id': clip.get('id'),
                         'filename': clip.get('filename'),
+                        'path': clip.get('path'),
                         'opponent': clip.get('opponent'),
+                        'opponent_slug': clip.get('opponent_slug'),
                         'quarter': clip.get('quarter'),
                         'possession': clip.get('possession'),
                         'start_time': clip.get('start_time'),
@@ -966,37 +969,33 @@ def api_deploy():
                         'shot_y': clip.get('shot_y'),
                         'shot_result': clip.get('shot_result'),
                         'notes': clip.get('notes'),
-                        'actions': clip.get('actions'),
+                        'actions_json': json.dumps(clip.get('actions')) if clip.get('actions') else None,
                         'shooter': clip.get('shooter'),
                         'game_id': clip.get('game_id'),
                         'location': clip.get('location'),
-                        'video_url': clip.get('video_url', clip.get('path')),
-                        'path': clip.get('path'),
                         'canonical_game_id': clip.get('canonical_game_id'),
-                        'opponent_slug': clip.get('opponent_slug'),
-                        'game_location': clip.get('game_location', clip.get('location')),
-                        'location_code': clip.get('location_code', clip.get('location')),
                     }
 
                     # Insert or update clip in cloud database
                     cur.execute("""
                         INSERT INTO clips (
-                            id, filename, opponent, quarter, possession, start_time, end_time,
-                            coverage, breakdown, contest, help_rotation, result, has_shot,
-                            shot_x, shot_y, shot_result, notes, actions, shooter, game_id,
-                            location, video_url, path, canonical_game_id, opponent_slug,
-                            game_location, location_code
+                            id, filename, path, opponent, opponent_slug, quarter, possession,
+                            start_time, end_time, coverage, breakdown, contest, help_rotation,
+                            result, has_shot, shot_x, shot_y, shot_result, notes, actions_json,
+                            shooter, game_id, location, canonical_game_id
                         ) VALUES (
-                            %(id)s, %(filename)s, %(opponent)s, %(quarter)s, %(possession)s,
-                            %(start_time)s, %(end_time)s, %(coverage)s, %(breakdown)s,
-                            %(contest)s, %(help_rotation)s, %(result)s, %(has_shot)s,
-                            %(shot_x)s, %(shot_y)s, %(shot_result)s, %(notes)s, %(actions)s,
-                            %(shooter)s, %(game_id)s, %(location)s, %(video_url)s, %(path)s,
-                            %(canonical_game_id)s, %(opponent_slug)s, %(game_location)s, %(location_code)s
+                            %(id)s, %(filename)s, %(path)s, %(opponent)s, %(opponent_slug)s,
+                            %(quarter)s, %(possession)s, %(start_time)s, %(end_time)s,
+                            %(coverage)s, %(breakdown)s, %(contest)s, %(help_rotation)s,
+                            %(result)s, %(has_shot)s, %(shot_x)s, %(shot_y)s, %(shot_result)s,
+                            %(notes)s, %(actions_json)s, %(shooter)s, %(game_id)s, %(location)s,
+                            %(canonical_game_id)s
                         )
                         ON CONFLICT (id) DO UPDATE SET
                             filename = EXCLUDED.filename,
+                            path = EXCLUDED.path,
                             opponent = EXCLUDED.opponent,
+                            opponent_slug = EXCLUDED.opponent_slug,
                             quarter = EXCLUDED.quarter,
                             possession = EXCLUDED.possession,
                             start_time = EXCLUDED.start_time,
@@ -1011,16 +1010,11 @@ def api_deploy():
                             shot_y = EXCLUDED.shot_y,
                             shot_result = EXCLUDED.shot_result,
                             notes = EXCLUDED.notes,
-                            actions = EXCLUDED.actions,
+                            actions_json = EXCLUDED.actions_json,
                             shooter = EXCLUDED.shooter,
                             game_id = EXCLUDED.game_id,
                             location = EXCLUDED.location,
-                            video_url = EXCLUDED.video_url,
-                            path = EXCLUDED.path,
-                            canonical_game_id = EXCLUDED.canonical_game_id,
-                            opponent_slug = EXCLUDED.opponent_slug,
-                            game_location = EXCLUDED.game_location,
-                            location_code = EXCLUDED.location_code
+                            canonical_game_id = EXCLUDED.canonical_game_id
                     """, clip_data)
 
                 conn.commit()
