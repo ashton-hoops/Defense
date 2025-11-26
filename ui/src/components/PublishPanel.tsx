@@ -111,7 +111,7 @@ export default function PublishPanel() {
   return (
     <div className="publish-panel">
       <div className="publish-header">
-        <h2>Deploy to Cloud</h2>
+        <h2>Deploy to Cloud [v2.1]</h2>
         <p>Sync your database and deploy code changes. Coaches will see everything. </p>
       </div>
 
