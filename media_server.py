@@ -917,6 +917,10 @@ def api_deploy():
     """Deploy code changes to cloud - only works in local mode"""
     import subprocess
     import os
+    import sys
+
+    print("🚀 DEPLOY ENDPOINT CALLED", flush=True)
+    sys.stdout.flush()
 
     # Only allow in local mode
     if is_cloud():
@@ -927,7 +931,8 @@ def api_deploy():
 
         # Step 1: Sync database to cloud
         steps.append({'step': 'db_sync', 'status': 'running', 'message': 'Syncing database to cloud...'})
-        print("☁️  Syncing database to cloud...")
+        print("☁️  Syncing database to cloud...", flush=True)
+        sys.stdout.flush()
 
         try:
             # Direct connection to cloud PostgreSQL
