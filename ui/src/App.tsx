@@ -56,9 +56,9 @@ const TABS: TabConfig[] = [
   },
   {
     key: 'publish',
-    label: 'Sync to Cloud',
+    label: 'Deploy to Cloud',
     path: '/publish',
-    description: 'Sync local database to cloud for coaches.',
+    description: 'Deploy database and code changes to cloud.',
     showInNav: true,
   },
   {

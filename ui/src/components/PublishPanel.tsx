@@ -7,6 +7,7 @@ import './PublishPanel.css'
 export default function PublishPanel() {
   const [localGames, setLocalGames] = useState<Game[]>([])
   const [syncing, setSyncing] = useState(false)
+  const [deploying, setDeploying] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [progress, setProgress] = useState<string>('')
@@ -67,13 +68,67 @@ export default function PublishPanel() {
     }
   }
 
+  const deployEverything = async () => {
+    setDeploying(true)
+    setError(null)
+    setSuccess(null)
+    setProgress('')
+
+    try {
+      // Step 1: Sync database
+      setProgress('Step 1/2: Syncing database to cloud...')
+      const response = await localAdapter.listClips()
+      const allClips = response.items
+
+      if (allClips.length > 0) {
+        let synced = 0
+        for (const clip of allClips) {
+          await cloudAdapter.saveClip(clip)
+          synced++
+          if (synced % 10 === 0 || synced === allClips.length) {
+            setProgress(`Step 1/2: Synced ${synced} of ${allClips.length} clips...`)
+          }
+        }
+      }
+
+      // Step 2: Deploy code changes
+      setProgress('Step 2/2: Deploying code changes to cloud...')
+      const deployResponse = await fetch('http://127.0.0.1:8000/api/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+
+      const deployData = await deployResponse.json()
+
+      if (!deployResponse.ok) {
+        throw new Error(deployData.error || 'Deploy failed')
+      }
+
+      // Show deploy steps
+      if (deployData.steps) {
+        for (const step of deployData.steps) {
+          console.log(`${step.step}: ${step.status} - ${step.message}`)
+        }
+      }
+
+      setSuccess(`✓ Deploy complete! Database synced (${allClips.length} clips) and code pushed to GitHub. Render will rebuild in 2-3 minutes.`)
+      setProgress('')
+    } catch (err: any) {
+      console.error('Failed to deploy:', err)
+      setError(err.message || 'Failed to deploy')
+      setProgress('')
+    } finally {
+      setDeploying(false)
+    }
+  }
+
   const totalClips = localGames.reduce((sum, game) => sum + game.clipCount, 0)
 
   return (
     <div className="publish-panel">
       <div className="publish-header">
-        <h2>Sync to Cloud</h2>
-        <p>Push your entire local database to the cloud. Coaches will see all your latest work.</p>
+        <h2>Deploy to Cloud</h2>
+        <p>Sync your database and deploy code changes. Coaches will see everything.</p>
       </div>
 
       {error && (
@@ -123,20 +178,37 @@ export default function PublishPanel() {
               </ul>
             </div>
 
-            <button
-              onClick={syncAllToCloud}
-              disabled={syncing}
-              className="sync-button"
-            >
-              {syncing ? (
-                <>
-                  <span className="spinner" />
-                  Syncing...
-                </>
-              ) : (
-                <>☁️ Sync All to Cloud</>
-              )}
-            </button>
+            <div className="button-group">
+              <button
+                onClick={deployEverything}
+                disabled={deploying || syncing}
+                className="deploy-button primary"
+              >
+                {deploying ? (
+                  <>
+                    <span className="spinner" />
+                    Deploying...
+                  </>
+                ) : (
+                  <>🚀 Deploy Everything to Cloud</>
+                )}
+              </button>
+
+              <button
+                onClick={syncAllToCloud}
+                disabled={syncing || deploying}
+                className="sync-button secondary"
+              >
+                {syncing ? (
+                  <>
+                    <span className="spinner" />
+                    Syncing...
+                  </>
+                ) : (
+                  <>☁️ Sync Database Only</>
+                )}
+              </button>
+            </div>
           </>
         )}
       </div>
