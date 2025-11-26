@@ -78,6 +78,7 @@ def parse_actions(raw):
                 'help': entry.get('help', ''),
                 'breakdown': entry.get('breakdown', ''),
                 'communication': entry.get('communication', ''),
+                'outcome': entry.get('outcome', ''),
             })
         return normalized
     return []
