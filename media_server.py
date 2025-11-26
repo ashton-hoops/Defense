@@ -167,21 +167,22 @@ def api_clips():
             except Exception as e:
                 print(f"⚠️  Failed to save to SQLite: {e}")
 
-            # Also save to metadata file as backup
-            if METADATA_FILE.exists():
-                with open(METADATA_FILE, 'r') as f:
-                    data = json.load(f)
-            else:
-                data = {"clips": []}
+            # Also save to metadata file as backup (local mode only)
+            if is_local():
+                if METADATA_FILE.exists():
+                    with open(METADATA_FILE, 'r') as f:
+                        data = json.load(f)
+                else:
+                    data = {"clips": []}
 
-            # Append the new clip
-            data.setdefault("clips", []).append(new_clip)
+                # Append the new clip
+                data.setdefault("clips", []).append(new_clip)
 
-            # Save back to file
-            with open(METADATA_FILE, 'w') as f:
-                json.dump(data, f, indent=2)
+                # Save back to file
+                with open(METADATA_FILE, 'w') as f:
+                    json.dump(data, f, indent=2)
 
-            print(f"✅ Added clip: {new_clip.get('id', 'unknown')} to metadata file")
+                print(f"✅ Added clip: {new_clip.get('id', 'unknown')} to metadata file")
             return jsonify({"ok": True, "message": "Clip added", "clip": transform_db_clip(new_clip)}), 201
 
         # ---- GET: Return all clips ----
@@ -190,7 +191,8 @@ def api_clips():
             transformed = [transform_db_clip(clip) for clip in db_clips]
             return jsonify(transformed)
 
-        if METADATA_FILE.exists():
+        # Fallback to metadata file (local mode only)
+        if is_local() and METADATA_FILE.exists():
             with open(METADATA_FILE, 'r') as f:
                 data = json.load(f)
             clips = data.get('clips', [])
@@ -204,6 +206,10 @@ def api_clips():
         return jsonify({"error": str(e)}), 500
 
 def update_metadata_clip(clip_id: str, updates: dict):
+    # Only update metadata file in local mode
+    if not is_local():
+        return
+
     if not METADATA_FILE.exists():
         return
 
@@ -250,6 +256,10 @@ def update_metadata_clip(clip_id: str, updates: dict):
 
 
 def load_metadata_clip(clip_id: str):
+    # Only use metadata file in local mode
+    if not is_local():
+        return None
+
     if not METADATA_FILE.exists():
         return None
     try:
@@ -264,6 +274,10 @@ def load_metadata_clip(clip_id: str):
 
 
 def remove_game_from_metadata(game_identifier, canonical_game_id=None):
+    # Only use metadata file in local mode
+    if not is_local():
+        return 0
+
     if not METADATA_FILE.exists():
         return 0
 
@@ -330,7 +344,8 @@ def api_clip_detail(clip_id):
             if db_record:
                 return jsonify(transform_db_clip(db_record))
 
-            if METADATA_FILE.exists():
+            # Fallback to metadata file (local mode only)
+            if is_local() and METADATA_FILE.exists():
                 with open(METADATA_FILE, 'r') as f:
                     data = json.load(f)
                 clips = data.get('clips', [])
@@ -361,8 +376,8 @@ def api_clip_detail(clip_id):
                 conn.close()
                 print(f"[DEBUG] Deleted from database")
 
-            # Delete from metadata file if exists
-            if METADATA_FILE.exists():
+            # Delete from metadata file if exists (local mode only)
+            if is_local() and METADATA_FILE.exists():
                 print(f"[DEBUG] Metadata file exists: {METADATA_FILE}")
                 with open(METADATA_FILE, 'r') as f:
                     data = json.load(f)
@@ -895,6 +910,139 @@ def api_login():
         print(f"❌ Login error: {e}")
         traceback.print_exc()
         return jsonify({'error': 'Login failed', 'details': str(e)}), 500
+
+
+@app.route('/api/deploy', methods=['POST'])
+def api_deploy():
+    """Deploy code changes to cloud - only works in local mode"""
+    import subprocess
+
+    # Only allow in local mode
+    if is_cloud():
+        return jsonify({'error': 'Deploy endpoint only available in local mode'}), 403
+
+    try:
+        steps = []
+
+        # Step 1: Build React app
+        steps.append({'step': 'build', 'status': 'running', 'message': 'Building React app...'})
+        print("📦 Building React app...")
+
+        ui_dir = PROJECT_ROOT / 'ui'
+        build_result = subprocess.run(
+            ['npm', 'run', 'build'],
+            cwd=ui_dir,
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+
+        if build_result.returncode != 0:
+            return jsonify({
+                'error': 'Build failed',
+                'details': build_result.stderr,
+                'steps': steps
+            }), 500
+
+        steps[-1] = {'step': 'build', 'status': 'success', 'message': 'React app built successfully'}
+
+        # Step 2: Git add
+        steps.append({'step': 'git_add', 'status': 'running', 'message': 'Staging changes...'})
+        print("📝 Staging git changes...")
+
+        git_add_result = subprocess.run(
+            ['git', 'add', '-A'],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        if git_add_result.returncode != 0:
+            return jsonify({
+                'error': 'Git add failed',
+                'details': git_add_result.stderr,
+                'steps': steps
+            }), 500
+
+        steps[-1] = {'step': 'git_add', 'status': 'success', 'message': 'Changes staged'}
+
+        # Step 3: Git commit
+        steps.append({'step': 'git_commit', 'status': 'running', 'message': 'Committing changes...'})
+        print("💾 Committing changes...")
+
+        commit_message = """Auto-deploy: Sync database and code changes
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>"""
+
+        git_commit_result = subprocess.run(
+            ['git', 'commit', '-m', commit_message],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        # Check if there's nothing to commit
+        if 'nothing to commit' in git_commit_result.stdout.lower():
+            steps[-1] = {'step': 'git_commit', 'status': 'skipped', 'message': 'No code changes to commit'}
+        elif git_commit_result.returncode != 0:
+            return jsonify({
+                'error': 'Git commit failed',
+                'details': git_commit_result.stderr,
+                'steps': steps
+            }), 500
+        else:
+            steps[-1] = {'step': 'git_commit', 'status': 'success', 'message': 'Changes committed'}
+
+        # Step 4: Git push
+        steps.append({'step': 'git_push', 'status': 'running', 'message': 'Pushing to GitHub...'})
+        print("🚀 Pushing to GitHub...")
+
+        git_push_result = subprocess.run(
+            ['git', 'push'],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+
+        if git_push_result.returncode != 0:
+            # Check if it's because there's nothing to push
+            if 'Everything up-to-date' in git_push_result.stderr or 'Everything up-to-date' in git_push_result.stdout:
+                steps[-1] = {'step': 'git_push', 'status': 'skipped', 'message': 'Already up-to-date'}
+            else:
+                return jsonify({
+                    'error': 'Git push failed',
+                    'details': git_push_result.stderr,
+                    'steps': steps
+                }), 500
+        else:
+            steps[-1] = {'step': 'git_push', 'status': 'success', 'message': 'Pushed to GitHub - Render will auto-deploy'}
+
+        print("✅ Deploy complete!")
+
+        return jsonify({
+            'success': True,
+            'message': 'Deploy successful - Render will rebuild in 2-3 minutes',
+            'steps': steps
+        })
+
+    except subprocess.TimeoutExpired as e:
+        return jsonify({
+            'error': f'Timeout during {e.cmd}',
+            'details': str(e)
+        }), 500
+    except Exception as e:
+        import traceback
+        print(f"❌ Deploy error: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'error': 'Deploy failed',
+            'details': str(e)
+        }), 500
 
 
 if __name__ == '__main__':

@@ -52,8 +52,35 @@ export class LocalAdapter implements DataAdapter {
   }
 
   async listGames(): Promise<Game[]> {
-    // TODO: implement call to local Flask/SQLite service
-    return []
+    const response = await fetch(this.buildUrl('/api/clips'))
+    if (!response.ok) {
+      throw new Error(`Failed to fetch clips for games list: ${response.status}`)
+    }
+
+    const data = await response.json()
+    const clips: Clip[] = Array.isArray(data) ? data.map(normalizeClip) : []
+
+    // Group clips by game
+    const gamesMap = new Map<string, Game>()
+
+    for (const clip of clips) {
+      const gameId = clip.canonicalGameId || clip.gameId?.toString() || 'unknown'
+
+      if (!gamesMap.has(gameId)) {
+        gamesMap.set(gameId, {
+          id: gameId,
+          opponent: clip.opponent || 'Unknown',
+          opponentSlug: clip.opponentSlug || '',
+          location: clip.location || clip.gameLocation || '',
+          clipCount: 0,
+        })
+      }
+
+      const game = gamesMap.get(gameId)!
+      game.clipCount++
+    }
+
+    return Array.from(gamesMap.values())
   }
 
   async listClips(_params?: ClipListParams): Promise<PaginatedResponse<Clip>> {
