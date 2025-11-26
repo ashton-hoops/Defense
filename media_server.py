@@ -934,7 +934,7 @@ def api_deploy():
             import psycopg
             from psycopg.rows import dict_row
 
-            cloud_db_url = 'postgresql://ou_basketball_defense_user:YOuN2IWhsqaCeI4E0L54pihqU1iy8Lvv@dpg-d4iknhur433s73a38t10-a.oregon-postgres.render.com/ou_basketball_defense'
+            cloud_db_url = 'postgresql://ou_basketball_db_user:1mKo7AhmuSe8fH3wJBXH7Sonp0MV6riw@dpg-d4iknhur433s73a38t10-a.oregon-postgres.render.com/ou_basketball_db?sslmode=require'
 
             # Fetch all clips from local database
             local_clips = fetch_clips()
@@ -943,7 +943,7 @@ def api_deploy():
                 print(f"📊 Found {len(local_clips)} clips to sync")
 
                 # Connect to cloud database and push each clip
-                conn = psycopg.connect(cloud_db_url, row_factory=dict_row)
+                conn = psycopg.connect(cloud_db_url, row_factory=dict_row, autocommit=False)
                 cur = conn.cursor()
 
                 for clip in local_clips:
