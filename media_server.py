@@ -931,7 +931,95 @@ def api_deploy():
     try:
         steps = []
 
-        # Step 1: Complete database clone to cloud
+        # Step 1: Upload videos to R2
+        steps.append({'step': 'r2_upload', 'status': 'running', 'message': 'Uploading videos to cloud storage...'})
+        print("📹 UPLOADING VIDEOS TO R2...", flush=True)
+        sys.stdout.flush()
+
+        video_url_map = {}  # Maps filename to R2 URL
+
+        try:
+            import boto3
+            from pathlib import Path
+
+            # Load R2 credentials
+            r2_config = {}
+            r2_env_path = PROJECT_ROOT / '.env.r2'
+            if r2_env_path.exists():
+                with open(r2_env_path) as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#') and '=' in line:
+                            key, value = line.split('=', 1)
+                            r2_config[key] = value
+
+            if r2_config:
+                # Create R2 client
+                s3 = boto3.client(
+                    's3',
+                    endpoint_url=f"https://{r2_config['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com",
+                    aws_access_key_id=r2_config['R2_ACCESS_KEY_ID'],
+                    aws_secret_access_key=r2_config['R2_SECRET_ACCESS_KEY'],
+                    region_name='auto'
+                )
+
+                bucket_name = r2_config['R2_BUCKET_NAME']
+                clips_dir = Path(CLIPS_DIR)
+
+                # Get filenames from database (only upload videos that are referenced)
+                local_db_path = PROJECT_ROOT / 'data' / 'analytics.sqlite'
+                local_conn = sqlite3.connect(str(local_db_path))
+                local_cur = local_conn.cursor()
+                local_cur.execute("SELECT DISTINCT filename FROM clips WHERE filename IS NOT NULL AND filename != ''")
+                db_filenames = {row[0] for row in local_cur.fetchall()}
+                local_conn.close()
+
+                print(f"  📊 Found {len(db_filenames)} videos referenced in database", flush=True)
+
+                if clips_dir.exists() and db_filenames:
+                    uploaded = 0
+                    for i, filename in enumerate(db_filenames, 1):
+                        video_path = clips_dir / filename
+
+                        if not video_path.exists():
+                            print(f"  ⚠️  Video not found: {filename}", flush=True)
+                            continue
+
+                        # Upload to R2
+                        print(f"  📤 Uploading {filename}...", flush=True)
+                        with open(video_path, 'rb') as f:
+                            s3.upload_fileobj(
+                                f,
+                                bucket_name,
+                                filename,
+                                ExtraArgs={'ContentType': 'video/mp4'}
+                            )
+
+                        # Build public URL
+                        r2_url = f"{r2_config['R2_PUBLIC_URL']}/{filename}"
+                        video_url_map[filename] = r2_url
+                        uploaded += 1
+
+                        if uploaded % 10 == 0:
+                            print(f"    Progress: {uploaded}/{len(db_filenames)} videos...", flush=True)
+
+                    print(f"  ✅ Uploaded {uploaded} videos to R2", flush=True)
+                    steps[-1] = {'step': 'r2_upload', 'status': 'success', 'message': f'Uploaded {uploaded} videos'}
+                else:
+                    print("  ⚠️  No videos to upload", flush=True)
+                    steps[-1] = {'step': 'r2_upload', 'status': 'skipped', 'message': 'No videos to upload'}
+            else:
+                print("  ⚠️  R2 config not found, skipping video upload", flush=True)
+                steps[-1] = {'step': 'r2_upload', 'status': 'skipped', 'message': 'R2 not configured'}
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"  ⚠️  Video upload failed: {e}", flush=True)
+            steps[-1] = {'step': 'r2_upload', 'status': 'failed', 'message': f'Video upload failed: {str(e)}'}
+            # Continue even if upload fails
+
+        # Step 2: Complete database clone to cloud
         steps.append({'step': 'db_clone', 'status': 'running', 'message': 'Cloning entire database to cloud...'})
         print("☁️  CLONING ENTIRE DATABASE TO CLOUD...", flush=True)
         sys.stdout.flush()
@@ -963,6 +1051,11 @@ def api_deploy():
             local_clips = [dict(row) for row in local_cur.fetchall()]
 
             print(f"  📦 Found {len(local_clips)} clips in local database", flush=True)
+
+            # Step 3: Update paths with R2 URLs
+            for clip in local_clips:
+                if clip.get('filename') and clip['filename'] in video_url_map:
+                    clip['path'] = video_url_map[clip['filename']]
 
             # Step 3: Bulk insert into cloud (raw copy)
             if local_clips:
