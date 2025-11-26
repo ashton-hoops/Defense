@@ -75,24 +75,7 @@ export default function PublishPanel() {
     setProgress('')
 
     try {
-      // Step 1: Sync database
-      setProgress('Step 1/2: Syncing database to cloud...')
-      const response = await localAdapter.listClips()
-      const allClips = response.items
-
-      if (allClips.length > 0) {
-        let synced = 0
-        for (const clip of allClips) {
-          await cloudAdapter.saveClip(clip)
-          synced++
-          if (synced % 10 === 0 || synced === allClips.length) {
-            setProgress(`Step 1/2: Synced ${synced} of ${allClips.length} clips...`)
-          }
-        }
-      }
-
-      // Step 2: Deploy code changes
-      setProgress('Step 2/2: Deploying code changes to cloud...')
+      setProgress('Deploying to cloud...')
       const deployResponse = await fetch('http://127.0.0.1:8000/api/deploy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -104,14 +87,15 @@ export default function PublishPanel() {
         throw new Error(deployData.error || 'Deploy failed')
       }
 
-      // Show deploy steps
+      // Show deploy steps with progress
       if (deployData.steps) {
         for (const step of deployData.steps) {
           console.log(`${step.step}: ${step.status} - ${step.message}`)
+          setProgress(step.message)
         }
       }
 
-      setSuccess(`✓ Deploy complete! Database synced (${allClips.length} clips) and code pushed to GitHub. Render will rebuild in 2-3 minutes.`)
+      setSuccess(`✓ ${deployData.message || 'Deploy complete! Render will rebuild in 2-3 minutes.'}`)
       setProgress('')
     } catch (err: any) {
       console.error('Failed to deploy:', err)

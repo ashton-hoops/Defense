@@ -916,6 +916,7 @@ def api_login():
 def api_deploy():
     """Deploy code changes to cloud - only works in local mode"""
     import subprocess
+    import os
 
     # Only allow in local mode
     if is_cloud():
@@ -924,7 +925,41 @@ def api_deploy():
     try:
         steps = []
 
-        # Step 1: Build React app
+        # Step 1: Sync database to cloud
+        steps.append({'step': 'db_sync', 'status': 'running', 'message': 'Syncing database to cloud...'})
+        print("☁️  Syncing database to cloud...")
+
+        try:
+            # Set DATABASE_URL for cloud connection (from Render PostgreSQL)
+            cloud_db_url = 'postgresql://ou_basketball_defense_user:YOuN2IWhsqaCeI4E0L54pihqU1iy8Lvv@dpg-d4iknhur433s73a38t10-a.oregon-postgres.render.com/ou_basketball_defense'
+            os.environ['DATABASE_URL'] = cloud_db_url
+
+            # Import cloud database module (will use DATABASE_URL from environment)
+            from cloud_db import upsert_clip as cloud_upsert_clip
+
+            # Fetch all clips from local database
+            local_clips = fetch_clips()
+
+            if local_clips and len(local_clips) > 0:
+                print(f"📊 Found {len(local_clips)} clips to sync")
+
+                # Push each clip to cloud database
+                for clip in local_clips:
+                    cloud_upsert_clip(clip)
+
+                steps[-1] = {'step': 'db_sync', 'status': 'success', 'message': f'Synced {len(local_clips)} clips to cloud'}
+                print(f"✅ Synced {len(local_clips)} clips to cloud")
+            else:
+                steps[-1] = {'step': 'db_sync', 'status': 'skipped', 'message': 'No clips to sync'}
+                print("⚠️  No clips found to sync")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"⚠️  Database sync failed: {e}")
+            steps[-1] = {'step': 'db_sync', 'status': 'failed', 'message': f'Database sync failed: {str(e)}'}
+            # Continue with deployment even if sync fails
+
+        # Step 2: Build React app
         steps.append({'step': 'build', 'status': 'running', 'message': 'Building React app...'})
         print("📦 Building React app...")
 
