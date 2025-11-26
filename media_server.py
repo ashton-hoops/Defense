@@ -947,6 +947,37 @@ def api_deploy():
                 cur = conn.cursor()
 
                 for clip in local_clips:
+                    # Prepare clip data with defaults for missing fields
+                    clip_data = {
+                        'id': clip.get('id'),
+                        'filename': clip.get('filename'),
+                        'opponent': clip.get('opponent'),
+                        'quarter': clip.get('quarter'),
+                        'possession': clip.get('possession'),
+                        'start_time': clip.get('start_time'),
+                        'end_time': clip.get('end_time'),
+                        'coverage': clip.get('coverage'),
+                        'breakdown': clip.get('breakdown'),
+                        'contest': clip.get('contest'),
+                        'help_rotation': clip.get('help_rotation'),
+                        'result': clip.get('result'),
+                        'has_shot': clip.get('has_shot'),
+                        'shot_x': clip.get('shot_x'),
+                        'shot_y': clip.get('shot_y'),
+                        'shot_result': clip.get('shot_result'),
+                        'notes': clip.get('notes'),
+                        'actions': clip.get('actions'),
+                        'shooter': clip.get('shooter'),
+                        'game_id': clip.get('game_id'),
+                        'location': clip.get('location'),
+                        'video_url': clip.get('video_url', clip.get('path')),
+                        'path': clip.get('path'),
+                        'canonical_game_id': clip.get('canonical_game_id'),
+                        'opponent_slug': clip.get('opponent_slug'),
+                        'game_location': clip.get('game_location', clip.get('location')),
+                        'location_code': clip.get('location_code', clip.get('location')),
+                    }
+
                     # Insert or update clip in cloud database
                     cur.execute("""
                         INSERT INTO clips (
@@ -990,7 +1021,7 @@ def api_deploy():
                             opponent_slug = EXCLUDED.opponent_slug,
                             game_location = EXCLUDED.game_location,
                             location_code = EXCLUDED.location_code
-                    """, clip)
+                    """, clip_data)
 
                 conn.commit()
                 cur.close()
