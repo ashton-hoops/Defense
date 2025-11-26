@@ -930,12 +930,11 @@ def api_deploy():
         print("☁️  Syncing database to cloud...")
 
         try:
-            # Set DATABASE_URL for cloud connection (from Render PostgreSQL)
-            cloud_db_url = 'postgresql://ou_basketball_defense_user:YOuN2IWhsqaCeI4E0L54pihqU1iy8Lvv@dpg-d4iknhur433s73a38t10-a.oregon-postgres.render.com/ou_basketball_defense'
-            os.environ['DATABASE_URL'] = cloud_db_url
+            # Direct connection to cloud PostgreSQL
+            import psycopg
+            from psycopg.rows import dict_row
 
-            # Import cloud database module (will use DATABASE_URL from environment)
-            from cloud_db import upsert_clip as cloud_upsert_clip
+            cloud_db_url = 'postgresql://ou_basketball_defense_user:YOuN2IWhsqaCeI4E0L54pihqU1iy8Lvv@dpg-d4iknhur433s73a38t10-a.oregon-postgres.render.com/ou_basketball_defense'
 
             # Fetch all clips from local database
             local_clips = fetch_clips()
@@ -943,9 +942,59 @@ def api_deploy():
             if local_clips and len(local_clips) > 0:
                 print(f"📊 Found {len(local_clips)} clips to sync")
 
-                # Push each clip to cloud database
+                # Connect to cloud database and push each clip
+                conn = psycopg.connect(cloud_db_url, row_factory=dict_row)
+                cur = conn.cursor()
+
                 for clip in local_clips:
-                    cloud_upsert_clip(clip)
+                    # Insert or update clip in cloud database
+                    cur.execute("""
+                        INSERT INTO clips (
+                            id, filename, opponent, quarter, possession, start_time, end_time,
+                            coverage, breakdown, contest, help_rotation, result, has_shot,
+                            shot_x, shot_y, shot_result, notes, actions, shooter, game_id,
+                            location, video_url, path, canonical_game_id, opponent_slug,
+                            game_location, location_code
+                        ) VALUES (
+                            %(id)s, %(filename)s, %(opponent)s, %(quarter)s, %(possession)s,
+                            %(start_time)s, %(end_time)s, %(coverage)s, %(breakdown)s,
+                            %(contest)s, %(help_rotation)s, %(result)s, %(has_shot)s,
+                            %(shot_x)s, %(shot_y)s, %(shot_result)s, %(notes)s, %(actions)s,
+                            %(shooter)s, %(game_id)s, %(location)s, %(video_url)s, %(path)s,
+                            %(canonical_game_id)s, %(opponent_slug)s, %(game_location)s, %(location_code)s
+                        )
+                        ON CONFLICT (id) DO UPDATE SET
+                            filename = EXCLUDED.filename,
+                            opponent = EXCLUDED.opponent,
+                            quarter = EXCLUDED.quarter,
+                            possession = EXCLUDED.possession,
+                            start_time = EXCLUDED.start_time,
+                            end_time = EXCLUDED.end_time,
+                            coverage = EXCLUDED.coverage,
+                            breakdown = EXCLUDED.breakdown,
+                            contest = EXCLUDED.contest,
+                            help_rotation = EXCLUDED.help_rotation,
+                            result = EXCLUDED.result,
+                            has_shot = EXCLUDED.has_shot,
+                            shot_x = EXCLUDED.shot_x,
+                            shot_y = EXCLUDED.shot_y,
+                            shot_result = EXCLUDED.shot_result,
+                            notes = EXCLUDED.notes,
+                            actions = EXCLUDED.actions,
+                            shooter = EXCLUDED.shooter,
+                            game_id = EXCLUDED.game_id,
+                            location = EXCLUDED.location,
+                            video_url = EXCLUDED.video_url,
+                            path = EXCLUDED.path,
+                            canonical_game_id = EXCLUDED.canonical_game_id,
+                            opponent_slug = EXCLUDED.opponent_slug,
+                            game_location = EXCLUDED.game_location,
+                            location_code = EXCLUDED.location_code
+                    """, clip)
+
+                conn.commit()
+                cur.close()
+                conn.close()
 
                 steps[-1] = {'step': 'db_sync', 'status': 'success', 'message': f'Synced {len(local_clips)} clips to cloud'}
                 print(f"✅ Synced {len(local_clips)} clips to cloud")
