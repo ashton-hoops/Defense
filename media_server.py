@@ -84,18 +84,23 @@ def parse_actions(raw):
     return []
 
 def derive_video_url(filename, fallback=None):
+    print(f"🎬 derive_video_url called: filename={filename}, fallback={fallback}", flush=True)
     for raw in (filename, fallback):
         if not raw:
             continue
         # If already an R2 URL (or any absolute URL), return it unchanged
         raw_str = str(raw)
         if raw_str.startswith('https://') or raw_str.startswith('http://'):
+            print(f"✅ Returning R2 URL: {raw_str}", flush=True)
             return raw_str
         # Otherwise check local file system
         name = Path(raw).name
         clip_path = CLIPS_DIR / name
         if clip_path.exists():
-            return f"/legacy/Clips/{name}"
+            local_url = f"/legacy/Clips/{name}"
+            print(f"✅ Returning local URL: {local_url}", flush=True)
+            return local_url
+    print(f"❌ No video URL found, returning None", flush=True)
     return None
 
 @app.route('/')
