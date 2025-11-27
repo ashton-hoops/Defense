@@ -1163,6 +1163,14 @@ def api_deploy():
         print(f"✅ Changes staged", flush=True)
         steps[-1] = {'step': 'git_add', 'status': 'success', 'message': 'Changes staged'}
 
+        # Force a commit by creating a timestamp file
+        from datetime import datetime
+        deploy_marker = PROJECT_ROOT / '.deploy-timestamp'
+        deploy_marker.write_text(f"Last deployed: {datetime.now().isoformat()}\n")
+
+        # Add the timestamp file
+        subprocess.run(['git', 'add', '.deploy-timestamp'], cwd=PROJECT_ROOT, check=False)
+
         # Step 5: Git commit
         steps.append({'step': 'git_commit', 'status': 'running', 'message': 'Committing changes...'})
         print("💾 Committing changes...", flush=True)
