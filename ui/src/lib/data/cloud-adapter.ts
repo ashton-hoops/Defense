@@ -1,5 +1,6 @@
 import type { Clip, Game, ExtractionJob, PaginatedResponse } from '../types'
 import type { ClipListParams, DataAdapter } from './index'
+import { normalizeClip } from './transformers'
 
 // Use relative URLs when in production (same domain), absolute in dev
 const API_BASE = import.meta.env.DEV ? 'https://ou-basketball-defense.onrender.com' : ''
@@ -49,7 +50,8 @@ export class CloudAdapter implements DataAdapter {
     const response = await this.fetchAPI('/api/clips')
     if (!response.ok) throw new Error('Failed to fetch games')
 
-    const clips: Clip[] = await response.json()
+    const rawClips = await response.json()
+    const clips: Clip[] = Array.isArray(rawClips) ? rawClips.map(normalizeClip) : []
 
     // Group clips by game
     const gamesMap = new Map<string, Game>()
@@ -78,7 +80,8 @@ export class CloudAdapter implements DataAdapter {
     const response = await this.fetchAPI('/api/clips')
     if (!response.ok) throw new Error('Failed to fetch clips')
 
-    let clips: Clip[] = await response.json()
+    const rawClips = await response.json()
+    let clips: Clip[] = Array.isArray(rawClips) ? rawClips.map(normalizeClip) : []
 
     // Filter by gameId if provided
     if (params?.gameId) {
@@ -105,7 +108,8 @@ export class CloudAdapter implements DataAdapter {
   async getClip(id: string): Promise<Clip | null> {
     const response = await this.fetchAPI(`/api/clip/${id}`)
     if (!response.ok) return null
-    return await response.json()
+    const rawClip = await response.json()
+    return normalizeClip(rawClip)
   }
 
   async saveClip(clip: Clip): Promise<Clip> {
